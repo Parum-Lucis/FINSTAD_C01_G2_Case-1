@@ -14,14 +14,14 @@ library(quantmod)
 ```
 
 ```{r set-date}
-start_date <- as.Date("2020-01-01")
+start_date <- as.Date("2019-12-31")
 end_date <- as.Date("2025-12-31")
 ```
 
 ```{r load-yahoo}
 yahoo_tickers <- c(
   US_Equity = "AAPL",     # Placeholder US equity
-  PH_Equity = "ALI.PS",   # Placeholder PH equity (PSE uses the .PS suffix)
+  PH_Equity = "PSEI.PS",  # Placeholder PH equity
   Bitcoin = "BTC-USD",    # Bitcoin in USD
   SPY = "SPY",            # SPDR S&P 500 ETF Trust
   VIX = "^VIX"            # CBOE Volatility Index
@@ -42,4 +42,59 @@ getSymbols(fred_tickers, src = "FRED")
 DGS10 <- window(DGS10, start = start_date, end = end_date)
 FEDFUNDS <- window(FEDFUNDS, start = start_date, end = end_date)
 CPIAUCSL <- window(CPIAUCSL, start = start_date, end = end_date)
+```
+```{r init-obs}
+instruments <- c("AAPL", "PSEI.PS", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL")
+init_obs <- function(ticker_list, sample_size = 3){
+   for (sym in ticker_list) {
+    data_obj <- get(sym)
+    cat("INSTRUMENT:", sym, "\n")
+    
+    print(head(data_obj))
+    cat("\n")
+    
+    na_indices <- which(rowSums(is.na(data_obj)) > 0)
+    missing_count <- length(na_indices)
+    
+    cat("Total NAs:", missing_count, "\n\n")
+    if (missing_count > 0) {
+      for (idx in head(na_indices, sample_size)) {
+        start_idx <- max(1, idx - 1)
+        end_idx <- min(nrow(data_obj), idx + 1)
+        print(data_obj[start_idx:end_idx, ])
+        cat("------\n")
+      }
+      cat("\n")
+    }
+    
+    dup_indices <- which(duplicated(zoo::index(data_obj)))
+    dup_count <- length(dup_indices)
+    cat("Total Duplicates:", dup_count, "\n\n")
+    
+    if (dup_count > 0) {
+      for (idx in head(dup_indices, sample_size)) {
+        start_idx <- max(1, idx - 1)
+        end_idx <- min(nrow(data_obj), idx + 1)
+        
+        print(data_obj[start_idx:end_idx, ])
+        cat("------\n")
+      }
+      cat("\n")
+    }
+  } 
+}
+init_obs(instruments)
+```
+
+```{r fix-local-na}
+for (sym in instruments) {
+  temp_data <- get(sym)
+  temp_data <- na.locf(temp_data)
+  temp_data <- temp_data["2020/"]
+  assign(sym, temp_data)
+}
+```
+
+```{r check-local-na-fix}
+init_obs(instruments)
 ```
