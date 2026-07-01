@@ -1,0 +1,45 @@
+---
+title: "Main"
+author: "Roan Campo, Denzel Macayan, Bea Uy, Miguel Uy"
+date: "2026-07-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r set-dependencies}
+library(quantmod)
+```
+
+```{r set-date}
+start_date <- as.Date("2020-01-01")
+end_date <- as.Date("2025-12-31")
+```
+
+```{r load-yahoo}
+yahoo_tickers <- c(
+  US_Equity = "AAPL",     # Placeholder US equity
+  PH_Equity = "ALI.PS",   # Placeholder PH equity (PSE uses the .PS suffix)
+  Bitcoin = "BTC-USD",    # Bitcoin in USD
+  SPY = "SPY",            # SPDR S&P 500 ETF Trust
+  VIX = "^VIX"            # CBOE Volatility Index
+)
+
+getSymbols(yahoo_tickers, src = "yahoo", from = start_date, to = end_date)
+```
+
+```{r load-fred}
+fred_tickers <- c(
+  "DGS10",
+  "FEDFUNDS",
+  "CPIAUCSL"
+)
+
+getSymbols(fred_tickers, src = "FRED")
+
+DGS10 <- window(DGS10, start = start_date, end = end_date)
+FEDFUNDS <- window(FEDFUNDS, start = start_date, end = end_date)
+CPIAUCSL <- window(CPIAUCSL, start = start_date, end = end_date)
+```
