@@ -10,11 +10,21 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r set-dependencies}
-library(quantmod)
+required_packages <- c("tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod")
+
+for (pkg in required_packages) {
+  
+  if (!require(pkg, character.only = TRUE)) {
+    
+    install.packages(pkg)
+
+    library(pkg, character.only = TRUE)
+  }
+}
 ```
 
 ```{r set-date}
-start_date <- as.Date("2019-12-31")
+start_date <- as.Date("2019-12-01")
 end_date <- as.Date("2025-12-31")
 ```
 
@@ -90,7 +100,6 @@ init_obs(instruments)
 for (sym in instruments) {
   temp_data <- get(sym)
   temp_data <- na.locf(temp_data)
-  temp_data <- temp_data["2020/"]
   assign(sym, temp_data)
 }
 ```
@@ -98,3 +107,160 @@ for (sym in instruments) {
 ```{r check-local-na-fix}
 init_obs(instruments)
 ```
+```{r convert-to-df}
+df_list <- map(instruments, function(sym) {
+  
+  data_obj <- get(sym)
+  
+  clean_df <- as.data.frame(data_obj) %>% 
+    rownames_to_column(var = "Date") %>% 
+    mutate(Date = as.Date(Date))
+  
+  return(clean_df)
+})
+
+master_df <- df_list %>% 
+  reduce(full_join, by = "Date") %>% 
+  arrange(Date)
+```
+
+```{r explore-master-df}
+explore_instruments <- function(instruments, master_df) {
+  for (sym in instruments) {
+    cat("INSTRUMENT:", sym, "\n")
+    
+    instrument_df <- master_df %>% 
+      select(Date, starts_with(sym))
+    
+    print(head(instrument_df))
+    cat("\n")
+    
+    cat("--- Missing Values per Column ---\n")
+    print(colSums(is.na(instrument_df)))
+    cat("\n")
+    
+    missing_rows <- instrument_df %>%
+      filter(if_any(starts_with(sym), is.na))
+    
+    total_missing <- nrow(missing_rows)
+    cat("Total Rows with NAs:", total_missing, "\n")
+    
+    if (total_missing > 0) {
+      cat("--- Top 10 Missing Rows ---\n")
+      print(head(missing_rows, 10))
+    }
+    
+    dup_count <- sum(duplicated(instrument_df$Date))
+  }
+  
+  dplyr::glimpse(master_df)
+}
+explore_instruments(instruments, master_df)
+```
+
+```{r fix-missing-master-df}
+master_df <- master_df %>%
+  fill(everything(), .direction = "down")
+
+master_df <- master_df %>%
+  filter(Date >= as.Date("2020-01-01"))
+
+explore_instruments(instruments, master_df)
+```
+```{r function-descriptive-statistics}
+get_summary_stats <- function(df, target_cols, frequency = "overall") {
+  
+  base_df <- df %>%
+    select(Date, all_of(target_cols)) %>%
+    pivot_longer(cols = -Date, names_to = "Instrument", values_to = "Value")
+  
+  if (frequency == "yearly") {
+    base_df <- base_df %>%
+      mutate(Period = format(Date, "%Y")) %>%
+      group_by(Instrument, Period)
+      
+  } else if (frequency == "quarterly") {
+    base_df <- base_df %>%
+      mutate(Period = paste0(format(Date, "%Y"), "-", quarters(Date))) %>%
+      group_by(Instrument, Period)
+      
+  } else if (frequency == "monthly") {
+    base_df <- base_df %>%
+      mutate(Period = format(Date, "%Y-%m")) %>%
+      group_by(Instrument, Period)
+      
+  } else if (frequency == "seasonal_quarter") {
+    base_df <- base_df %>%
+      mutate(Period = quarters(Date)) %>%
+      group_by(Instrument, Period)
+      
+  } else if (frequency == "seasonal_month") {
+    base_df <- base_df %>%
+      mutate(Period = format(Date, "%m")) %>%
+      group_by(Instrument, Period)
+      
+  } else {
+    base_df <- base_df %>%
+      mutate(Period = "Overall") %>%
+      group_by(Instrument, Period)
+  }
+  
+  summary_stats <- base_df %>%
+    summarise(
+      Mean = mean(Value, na.rm = TRUE),
+      Median = median(Value, na.rm = TRUE),
+      Variance = var(Value, na.rm = TRUE),
+      Std_Dev = sd(Value, na.rm = TRUE),
+      Min = min(Value, na.rm = TRUE),
+      Max = max(Value, na.rm = TRUE),
+      Range = Max - Min,
+      Skewness = skewness(Value, na.rm = TRUE),
+      Kurtosis = kurtosis(Value, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(across(where(is.numeric), ~round(., 2)))
+  
+  if (frequency != "overall") {
+    summary_stats <- summary_stats %>%
+      pivot_wider(
+        names_from = Instrument,
+        values_from = c(Mean, Median, Variance, Std_Dev, Min, Max, Range, Skewness, Kurtosis),
+        names_glue = "{Instrument}_{.value}"
+      ) %>%
+      arrange(Period)
+  }
+  
+  return(summary_stats)
+}
+
+target_cols <- c(
+  "AAPL.Close", 
+  "PSEI.PS.Close", 
+  "BTC-USD.Close", 
+  "SPY.Close", 
+  "VIX.Close", 
+  "DGS10", 
+  "FEDFUNDS", 
+  "CPIAUCSL"
+)
+
+print(get_summary_stats(master_df, target_cols, frequency = "overall"))
+```
+```{r descriptive-statistics-yearly}
+print(get_summary_stats(master_df, target_cols, "yearly"))
+```
+```{r descriptive-statistics-quarterly}
+print(get_summary_stats(master_df, target_cols, "quarterly"))
+```
+```{r descriptive-statistics-monthly}
+print(get_summary_stats(master_df, target_cols, "monthly"))
+```
+
+```{r descriptive-statistics-seasonal_quarter}
+print(get_summary_stats(master_df, target_cols, "seasonal_quarter"))
+```
+
+```{r descriptive-statistics-seasonal_monthly}
+print(get_summary_stats(master_df, target_cols, "seasonal_month"))
+```
+
