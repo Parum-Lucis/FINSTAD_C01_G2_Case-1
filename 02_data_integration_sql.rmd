@@ -4,34 +4,54 @@
 
 ```{r convert-to-df}
 df_list <- map(instruments, function(sym) {
-  
   data_obj <- get(sym)
   
-  clean_df <- as.data.frame(data_obj) %>% 
+  # If it has an Adjusted column, extract it. Otherwise, use the raw data object.
+  if (has.Ad(data_obj)) {
+    extracted_data <- Ad(data_obj)
+  } else {
+    extracted_data <- data_obj
+  }
+  
+  clean_df <- as.data.frame(extracted_data) %>% 
     rownames_to_column(var = "Date") %>% 
-    mutate(Date = as.Date(Date))
+    mutate(Date = as.Date(Date)) %>%
+    as_tibble()
   
   return(clean_df)
 })
 
 master_df <- df_list %>% 
+  compact() %>%
   reduce(full_join, by = "Date") %>% 
-  arrange(Date)
+  arrange(Date) %>% 
+  fill(-Date, .direction = "down")
+```
+
+```{r log-returns}
+master_df <- master_df %>%
+  mutate(across(
+    -Date, 
+    ~ c(NA, diff(log(.x)))
+  )) %>%
+  rename_with(~ str_replace(.x, "\\.Adjusted$", ".LogAdj"), -Date)
 ```
 
 ```{r explore-master-df}
 explore_instruments <- function(instruments, master_df) {
   for (sym in instruments) {
-    cat("\n############################\nINSTRUMENT:", sym, "\n###########################\n\n")
+    cat("INSTRUMENT:", sym, "\n")
     
     instrument_df <- master_df %>% 
       select(Date, starts_with(sym))
     
-    print(head(instrument_df))
+    print(instrument_df, n = 6)
     cat("\n")
     
     cat("--- Missing Values per Column ---\n")
-    print(colSums(is.na(instrument_df)))
+    instrument_df %>% 
+      summarise(across(everything(), ~sum(is.na(.)))) %>% 
+      print(width = Inf)
     cat("\n")
     
     missing_rows <- instrument_df %>%
@@ -42,13 +62,12 @@ explore_instruments <- function(instruments, master_df) {
     
     if (total_missing > 0) {
       cat("--- Top 10 Missing Rows ---\n")
-      print(head(missing_rows, 10))
+      print(missing_rows, n = 10)
     }
     
     dup_count <- sum(duplicated(instrument_df$Date))
   }
   
-  cat("\n###########################\nMASTER DF:\n###########################\n")
   dplyr::glimpse(master_df)
 }
 explore_instruments(instruments, master_df)
@@ -56,9 +75,7 @@ explore_instruments(instruments, master_df)
 
 ```{r fix-missing-master-df}
 master_df <- master_df %>%
-  fill(everything(), .direction = "down")
-
-master_df <- master_df %>%
+  fill(-Date, .direction = "down") %>%
   filter(Date >= as.Date("2020-01-01"))
 
 explore_instruments(instruments, master_df)

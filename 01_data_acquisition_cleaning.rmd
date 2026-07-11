@@ -1,16 +1,46 @@
 # Data Acquisition & Cleaning
 
+```{r fetch-pse-data}
+pal_raw <- read_csv("pal_stock.csv", show_col_types = FALSE) 
+
+pal_df <- pal_raw %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%Y")) %>%
+  
+  filter(!is.na(Date)) %>%
+  
+  arrange(Date) %>%
+  
+  mutate(
+    `Vol.` = case_when(
+      str_detect(`Vol.`, "K") ~ as.numeric(str_remove(`Vol.`, "K")) * 1000,
+      str_detect(`Vol.`, "M") ~ as.numeric(str_remove(`Vol.`, "M")) * 1000000,
+      `Vol.` == "-" ~ 0,
+      TRUE ~ as.numeric(`Vol.`)
+    )
+  ) %>%
+  select(Date, Open, High, Low, Price, `Vol.`) %>% 
+  rename(Close = Price, Volume = `Vol.`) %>%
+  
+  mutate(AdjClose = Close) 
+
+pal_xts <- xts(pal_df[, -1], order.by = pal_df$Date)
+
+colnames(pal_xts) <- c("PAL.Open", "PAL.High", "PAL.Low", "PAL.Close", "PAL.Volume", "PAL.Adjusted")
+
+PAL <- pal_xts["2019-12/2025-12"]
+```
+
 ```{r load-yahoo}
 yahoo_tickers <- c(
-  US_Equity = "AAPL",     # Placeholder US equity
-  PH_Equity = "PSEI.PS",  # Placeholder PH equity
-  Bitcoin = "BTC-USD",    # Bitcoin in USD
-  SPY = "SPY",            # SPDR S&P 500 ETF Trust
-  VIX = "^VIX"            # CBOE Volatility Index
+  US_Equity = "UAL",     # US Equity: United Airlines
+  Bitcoin = "BTC-USD",   # Bitcoin in USD
+  SPY = "SPY",           # SPDR S&P 500 ETF Trust
+  VIX = "^VIX"           # CBOE Volatility Index
 )
 
 getSymbols(yahoo_tickers, src = "yahoo", from = start_date, to = end_date)
 ```
+
 
 ```{r load-fred}
 fred_tickers <- c(
@@ -26,7 +56,7 @@ FEDFUNDS <- window(FEDFUNDS, start = start_date, end = end_date)
 CPIAUCSL <- window(CPIAUCSL, start = start_date, end = end_date)
 ```
 ```{r init-obs}
-instruments <- c("AAPL", "PSEI.PS", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL")
+instruments <- c("UAL", "PAL", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL")
 init_obs <- function(ticker_list, sample_size = 3){
    for (sym in ticker_list) {
     data_obj <- get(sym)
