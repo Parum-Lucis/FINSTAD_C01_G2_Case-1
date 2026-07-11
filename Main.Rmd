@@ -9,18 +9,21 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r set-dependencies}
-required_packages <- c("tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod")
+```{r set-environment-dependencies}
+required_packages <- c(
+  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr","stringr"
+)
 
-for (pkg in required_packages) {
-  
-  if (!require(pkg, character.only = TRUE)) {
-    
-    install.packages(pkg)
+missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
 
-    library(pkg, character.only = TRUE)
-  }
+if (length(missing_packages) > 0) {
+  cat("Installing missing dependencies:", paste(missing_packages, collapse = ", "), "\n")
+  install.packages(missing_packages)
 }
+
+invisible(lapply(required_packages, library, character.only = TRUE))
+
+eodhdR2::set_token("6a4d1a69783631.62359123")
 ```
 
 ```{r set-date}
@@ -28,17 +31,47 @@ start_date <- as.Date("2019-12-01")
 end_date <- as.Date("2025-12-31")
 ```
 
+```{r fetch-pse-data}
+pal_raw <- read_csv("pal_stock.csv", show_col_types = FALSE) 
+
+pal_df <- pal_raw %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%Y")) %>%
+  
+  filter(!is.na(Date)) %>%
+  
+  arrange(Date) %>%
+  
+  mutate(
+    `Vol.` = case_when(
+      str_detect(`Vol.`, "K") ~ as.numeric(str_remove(`Vol.`, "K")) * 1000,
+      str_detect(`Vol.`, "M") ~ as.numeric(str_remove(`Vol.`, "M")) * 1000000,
+      `Vol.` == "-" ~ 0,
+      TRUE ~ as.numeric(`Vol.`)
+    )
+  ) %>%
+  select(Date, Open, High, Low, Price, `Vol.`) %>% 
+  rename(Close = Price, Volume = `Vol.`) %>%
+  
+  mutate(AdjClose = Close) 
+
+pal_xts <- xts(pal_df[, -1], order.by = pal_df$Date)
+
+colnames(pal_xts) <- c("PAL.Open", "PAL.High", "PAL.Low", "PAL.Close", "PAL.Volume", "PAL.Adjusted")
+
+PAL <- pal_xts["2019-12/2025-12"]
+```
+
 ```{r load-yahoo}
 yahoo_tickers <- c(
-  US_Equity = "AAPL",     # Placeholder US equity
-  PH_Equity = "PSEI.PS",  # Placeholder PH equity
-  Bitcoin = "BTC-USD",    # Bitcoin in USD
-  SPY = "SPY",            # SPDR S&P 500 ETF Trust
-  VIX = "^VIX"            # CBOE Volatility Index
+  US_Equity = "UAL",     # US Equity: United Airlines
+  Bitcoin = "BTC-USD",   # Bitcoin in USD
+  SPY = "SPY",           # SPDR S&P 500 ETF Trust
+  VIX = "^VIX"           # CBOE Volatility Index
 )
 
 getSymbols(yahoo_tickers, src = "yahoo", from = start_date, to = end_date)
 ```
+
 
 ```{r load-fred}
 fred_tickers <- c(
@@ -54,7 +87,7 @@ FEDFUNDS <- window(FEDFUNDS, start = start_date, end = end_date)
 CPIAUCSL <- window(CPIAUCSL, start = start_date, end = end_date)
 ```
 ```{r init-obs}
-instruments <- c("AAPL", "PSEI.PS", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL")
+instruments <- c("UAL", "PAL", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL")
 init_obs <- function(ticker_list, sample_size = 3){
    for (sym in ticker_list) {
     data_obj <- get(sym)
@@ -107,21 +140,40 @@ for (sym in instruments) {
 ```{r check-local-na-fix}
 init_obs(instruments)
 ```
+
 ```{r convert-to-df}
 df_list <- map(instruments, function(sym) {
-  
   data_obj <- get(sym)
   
-  clean_df <- as.data.frame(data_obj) %>% 
+  # If it has an Adjusted column, extract it. Otherwise, use the raw data object.
+  if (has.Ad(data_obj)) {
+    extracted_data <- Ad(data_obj)
+  } else {
+    extracted_data <- data_obj
+  }
+  
+  clean_df <- as.data.frame(extracted_data) %>% 
     rownames_to_column(var = "Date") %>% 
-    mutate(Date = as.Date(Date))
+    mutate(Date = as.Date(Date)) %>%
+    as_tibble()
   
   return(clean_df)
 })
 
 master_df <- df_list %>% 
+  compact() %>%
   reduce(full_join, by = "Date") %>% 
-  arrange(Date)
+  arrange(Date) %>% 
+  fill(-Date, .direction = "down")
+```
+
+```{r log-returns}
+master_df <- master_df %>%
+  mutate(across(
+    -Date, 
+    ~ c(NA, diff(log(.x)))
+  )) %>%
+  rename_with(~ str_replace(.x, "\\.Adjusted$", ".LogAdj"), -Date)
 ```
 
 ```{r explore-master-df}
@@ -132,11 +184,13 @@ explore_instruments <- function(instruments, master_df) {
     instrument_df <- master_df %>% 
       select(Date, starts_with(sym))
     
-    print(head(instrument_df))
+    print(instrument_df, n = 6)
     cat("\n")
     
     cat("--- Missing Values per Column ---\n")
-    print(colSums(is.na(instrument_df)))
+    instrument_df %>% 
+      summarise(across(everything(), ~sum(is.na(.)))) %>% 
+      print(width = Inf)
     cat("\n")
     
     missing_rows <- instrument_df %>%
@@ -147,7 +201,7 @@ explore_instruments <- function(instruments, master_df) {
     
     if (total_missing > 0) {
       cat("--- Top 10 Missing Rows ---\n")
-      print(head(missing_rows, 10))
+      print(missing_rows, n = 10)
     }
     
     dup_count <- sum(duplicated(instrument_df$Date))
@@ -160,61 +214,46 @@ explore_instruments(instruments, master_df)
 
 ```{r fix-missing-master-df}
 master_df <- master_df %>%
-  fill(everything(), .direction = "down")
-
-master_df <- master_df %>%
+  fill(-Date, .direction = "down") %>%
   filter(Date >= as.Date("2020-01-01"))
 
 explore_instruments(instruments, master_df)
 ```
+
 ```{r function-descriptive-statistics}
 get_summary_stats <- function(df, target_cols, frequency = "overall") {
   
   base_df <- df %>%
     select(Date, all_of(target_cols)) %>%
-    pivot_longer(cols = -Date, names_to = "Instrument", values_to = "Value")
-  
-  if (frequency == "yearly") {
-    base_df <- base_df %>%
-      mutate(Period = format(Date, "%Y")) %>%
-      group_by(Instrument, Period)
-      
-  } else if (frequency == "quarterly") {
-    base_df <- base_df %>%
-      mutate(Period = paste0(format(Date, "%Y"), "-", quarters(Date))) %>%
-      group_by(Instrument, Period)
-      
-  } else if (frequency == "monthly") {
-    base_df <- base_df %>%
-      mutate(Period = format(Date, "%Y-%m")) %>%
-      group_by(Instrument, Period)
-      
-  } else if (frequency == "seasonal_quarter") {
-    base_df <- base_df %>%
-      mutate(Period = quarters(Date)) %>%
-      group_by(Instrument, Period)
-      
-  } else if (frequency == "seasonal_month") {
-    base_df <- base_df %>%
-      mutate(Period = format(Date, "%m")) %>%
-      group_by(Instrument, Period)
-      
-  } else {
-    base_df <- base_df %>%
-      mutate(Period = "Overall") %>%
-      group_by(Instrument, Period)
-  }
+    pivot_longer(cols = -Date, names_to = "Instrument", values_to = "Value") %>%
+    mutate(
+      Period = if (frequency == "yearly") {
+        format(Date, "%Y")
+      } else if (frequency == "quarterly") {
+        paste0(format(Date, "%Y"), "-", quarters(Date))
+      } else if (frequency == "monthly") {
+        format(Date, "%Y-%m")
+      } else if (frequency == "seasonal_quarter") {
+        quarters(Date)
+      } else if (frequency == "seasonal_month") {
+        format(Date, "%m")
+      } else {
+        "Overall"
+      }
+    ) %>%
+    group_by(Instrument, Period)
   
   summary_stats <- base_df %>%
     summarise(
       Mean = mean(Value, na.rm = TRUE),
       Median = median(Value, na.rm = TRUE),
+      Sum = sum(Value, na.rm = TRUE),
       Variance = var(Value, na.rm = TRUE),
       Std_Dev = sd(Value, na.rm = TRUE),
       Min = min(Value, na.rm = TRUE),
       Max = max(Value, na.rm = TRUE),
       Range = Max - Min,
-      Skewness = skewness(Value, na.rm = TRUE),
+      Skewness = skewness(Value, na.rm = TRUE), 
       Kurtosis = kurtosis(Value, na.rm = TRUE),
       .groups = "drop"
     ) %>%
@@ -234,11 +273,11 @@ get_summary_stats <- function(df, target_cols, frequency = "overall") {
 }
 
 target_cols <- c(
-  "AAPL.Close", 
-  "PSEI.PS.Close", 
-  "BTC-USD.Close", 
-  "SPY.Close", 
-  "VIX.Close", 
+  "UAL.LogAdj", 
+  "PAL.LogAdj", 
+  "BTC-USD.LogAdj", 
+  "SPY.LogAdj", 
+  "VIX.LogAdj", 
   "DGS10", 
   "FEDFUNDS", 
   "CPIAUCSL"
@@ -246,6 +285,7 @@ target_cols <- c(
 
 print(get_summary_stats(master_df, target_cols, frequency = "overall"))
 ```
+
 ```{r descriptive-statistics-yearly}
 print(get_summary_stats(master_df, target_cols, "yearly"))
 ```
