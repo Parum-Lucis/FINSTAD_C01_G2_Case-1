@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r set-environment-dependencies}
 required_packages <- c(
-  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr","stringr"
+  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr","stringr", "ggplot2", "quantmod"
 )
 
 missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
@@ -22,8 +22,6 @@ if (length(missing_packages) > 0) {
 }
 
 invisible(lapply(required_packages, library, character.only = TRUE))
-
-eodhdR2::set_token("6a4d1a69783631.62359123")
 ```
 
 ```{r set-date}
@@ -77,7 +75,8 @@ getSymbols(yahoo_tickers, src = "yahoo", from = start_date, to = end_date)
 fred_tickers <- c(
   "DGS10",
   "FEDFUNDS",
-  "CPIAUCSL"
+  "CPIAUCSL",
+  "DCOILWTICO"
 )
 
 getSymbols(fred_tickers, src = "FRED")
@@ -85,9 +84,10 @@ getSymbols(fred_tickers, src = "FRED")
 DGS10 <- window(DGS10, start = start_date, end = end_date)
 FEDFUNDS <- window(FEDFUNDS, start = start_date, end = end_date)
 CPIAUCSL <- window(CPIAUCSL, start = start_date, end = end_date)
+DCOILWTICO <- window(DCOILWTICO, start = start_date, end = end_date)
 ```
 ```{r init-obs}
-instruments <- c("UAL", "PAL", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL")
+instruments <- c("UAL", "PAL", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO")
 init_obs <- function(ticker_list, sample_size = 3){
    for (sym in ticker_list) {
     data_obj <- get(sym)
@@ -221,55 +221,60 @@ explore_instruments(instruments, master_df)
 ```
 
 ```{r function-descriptive-statistics}
-get_summary_stats <- function(df, target_cols, frequency = "overall") {
+analyze_instrument <- function(df, col_name) {
+  inst_data <- df %>%
+    select(Date, Value = all_of(col_name)) %>%
+    filter(!is.na(Value))
   
-  base_df <- df %>%
-    select(Date, all_of(target_cols)) %>%
-    pivot_longer(cols = -Date, names_to = "Instrument", values_to = "Value") %>%
-    mutate(
-      Period = if (frequency == "yearly") {
-        format(Date, "%Y")
-      } else if (frequency == "quarterly") {
-        paste0(format(Date, "%Y"), "-", quarters(Date))
-      } else if (frequency == "monthly") {
-        format(Date, "%Y-%m")
-      } else if (frequency == "seasonal_quarter") {
-        quarters(Date)
-      } else if (frequency == "seasonal_month") {
-        format(Date, "%m")
-      } else {
-        "Overall"
-      }
-    ) %>%
-    group_by(Instrument, Period)
+  summary_stats <- tibble(
+    Instrument = col_name,
+    Mean = mean(inst_data$Value),
+    Median = median(inst_data$Value),
+    Variance = var(inst_data$Value),
+    Std_Dev = sd(inst_data$Value),
+    Min = min(inst_data$Value),
+    Max = max(inst_data$Value),
+    Range = Max - Min,
+    Skewness = skewness(inst_data$Value), 
+    Kurtosis = kurtosis(inst_data$Value)
+  ) %>%
+    mutate(across(where(is.numeric), ~round(., 4)))
   
-  summary_stats <- base_df %>%
-    summarise(
-      Mean = mean(Value, na.rm = TRUE),
-      Median = median(Value, na.rm = TRUE),
-      Sum = sum(Value, na.rm = TRUE),
-      Variance = var(Value, na.rm = TRUE),
-      Std_Dev = sd(Value, na.rm = TRUE),
-      Min = min(Value, na.rm = TRUE),
-      Max = max(Value, na.rm = TRUE),
-      Range = Max - Min,
-      Skewness = skewness(Value, na.rm = TRUE), 
-      Kurtosis = kurtosis(Value, na.rm = TRUE),
-      .groups = "drop"
-    ) %>%
-    mutate(across(where(is.numeric), ~round(., 2)))
+  cat("\n======================================================\n")
+  cat("### Daily Summary Statistics:", col_name, "\n")
+  cat("======================================================\n")
+  print(summary_stats)
+  cat("\n")
   
-  if (frequency != "overall") {
-    summary_stats <- summary_stats %>%
-      pivot_wider(
-        names_from = Instrument,
-        values_from = c(Mean, Median, Variance, Std_Dev, Min, Max, Range, Skewness, Kurtosis),
-        names_glue = "{Instrument}_{.value}"
-      ) %>%
-      arrange(Period)
-  }
+  line_plot <- ggplot(inst_data, aes(x = Date, y = Value)) +
+    geom_line(color = "darkblue", alpha = 0.8) +
+    theme_minimal() +
+    labs(
+      title = paste("Daily Timeline of", col_name, "(2020 - 2025)"),
+      x = "Date",
+      y = "Value / Log Return"
+    ) +
+    theme(
+      plot.title = element_text(face = "bold", size = 14),
+      axis.title = element_text(face = "bold")
+    )
   
-  return(summary_stats)
+  dist_plot <- ggplot(inst_data, aes(x = Value)) +
+    geom_histogram(aes(y = after_stat(density)), bins = 50, fill = "steelblue", color = "white", alpha = 0.7) +
+    geom_density(color = "darkred", linewidth = 1) +
+    theme_minimal() +
+    labs(
+      title = paste("Daily Distribution of", col_name, "(2020 - 2025)"),
+      x = "Value / Log Return",
+      y = "Density"
+    ) +
+    theme(
+      plot.title = element_text(face = "bold", size = 14),
+      axis.title = element_text(face = "bold")
+    )
+  
+  print(line_plot)
+  print(dist_plot)
 }
 
 target_cols <- c(
@@ -280,27 +285,13 @@ target_cols <- c(
   "VIX.LogAdj", 
   "DGS10", 
   "FEDFUNDS", 
-  "CPIAUCSL"
+  "CPIAUCSL",
+  "DCOILWTICO"
 )
 
-print(get_summary_stats(master_df, target_cols, frequency = "overall"))
+for (col in target_cols) {
+  analyze_instrument(master_df, col)
+}
 ```
 
-```{r descriptive-statistics-yearly}
-print(get_summary_stats(master_df, target_cols, "yearly"))
-```
-```{r descriptive-statistics-quarterly}
-print(get_summary_stats(master_df, target_cols, "quarterly"))
-```
-```{r descriptive-statistics-monthly}
-print(get_summary_stats(master_df, target_cols, "monthly"))
-```
-
-```{r descriptive-statistics-seasonal_quarter}
-print(get_summary_stats(master_df, target_cols, "seasonal_quarter"))
-```
-
-```{r descriptive-statistics-seasonal_monthly}
-print(get_summary_stats(master_df, target_cols, "seasonal_month"))
-```
 
