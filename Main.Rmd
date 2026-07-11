@@ -294,4 +294,20 @@ for (col in target_cols) {
 }
 ```
 
+```{r bea-leftjoin1}
+<Fuel cost pass-through to airline returns>
+```
+
+```{r bea-leftjoin2}
+<Airline beta under volatility regimes>
+```
+
+```{r bea-innerjoin}
+<Bitcoin vs airlines correlation without forcing weekend loss>
+```
+
+```{r bea-antijoin}
+<PAL vs UAL holiday divergence>
+```
+
 
