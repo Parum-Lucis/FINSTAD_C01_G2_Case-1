@@ -22,7 +22,7 @@ master_df <- df_list %>%
 ```{r explore-master-df}
 explore_instruments <- function(instruments, master_df) {
   for (sym in instruments) {
-    cat("INSTRUMENT:", sym, "\n")
+    cat("\n############################\nINSTRUMENT:", sym, "\n###########################\n\n")
     
     instrument_df <- master_df %>% 
       select(Date, starts_with(sym))
@@ -48,6 +48,7 @@ explore_instruments <- function(instruments, master_df) {
     dup_count <- sum(duplicated(instrument_df$Date))
   }
   
+  cat("\n###########################\nMASTER DF:\n###########################\n")
   dplyr::glimpse(master_df)
 }
 explore_instruments(instruments, master_df)

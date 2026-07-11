@@ -1,6 +1,18 @@
 # Descriptive Statistics & Visualization
 
 ```{r function-descriptive-statistics}
+#` Gets Summary stats
+#' 
+#' Gets the Descriptive Statistics
+#'
+#' @param df base data frame
+#' @param target_cols target columns from `df`
+#' @param frequency the date to inspect on
+#'
+#' @returns
+#' @export
+#'
+#' @examples
 get_summary_stats <- function(df, target_cols, frequency = "overall") {
   
   base_df <- df %>%

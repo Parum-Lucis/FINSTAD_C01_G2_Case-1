@@ -368,9 +368,16 @@ Visualization</a></li>
 </ul>
 </div>
 
+<p>To run, use the <code>knit</code> button shown above in the ribbon.
+The purpose of this <code>Main.rmd</code> is to atomize the sections to
+parts. This will create</p>
+<p>You can run the child <code>.rmd</code> files in order in the same r
+session to get the output. Remember, for long outputs, you can hide them
+in RStudio.</p>
 <div id="package-installation" class="section level1" number="1">
 <h1><span class="header-section-number">1</span> Package
 Installation</h1>
+<p>Install the following packages:</p>
 <pre class="r"><code>required_packages &lt;- c(&quot;tidyr&quot;, &quot;dplyr&quot;, &quot;tibble&quot;, &quot;purrr&quot;, &quot;moments&quot;, &quot;quantmod&quot;)
 
 for (pkg in required_packages) {
@@ -438,6 +445,7 @@ for (pkg in required_packages) {
 </div>
 <div id="global-variables" class="section level1" number="2">
 <h1><span class="header-section-number">2</span> Global Variables</h1>
+<p>Set up the following dates:</p>
 <pre class="r"><code>start_date &lt;- as.Date(&quot;2019-12-01&quot;)
 end_date &lt;- as.Date(&quot;2025-12-31&quot;)</code></pre>
 </div>
@@ -516,11 +524,11 @@ init_obs &lt;- function(ticker_list, sample_size = 3){
 init_obs(instruments)</code></pre>
 <pre><code>## INSTRUMENT: AAPL 
 ##            AAPL.Open AAPL.High AAPL.Low AAPL.Close AAPL.Volume AAPL.Adjusted
-## 2019-12-02   66.8175   67.0625  65.8625    66.0400    94487200      63.61816
-## 2019-12-03   64.5775   64.8825  64.0725    64.8625   114430400      62.48386
-## 2019-12-04   65.2675   65.8275  65.1700    65.4350    67181600      63.03535
+## 2019-12-02   66.8175   67.0625  65.8625    66.0400    94487200      63.61818
+## 2019-12-03   64.5775   64.8825  64.0725    64.8625   114430400      62.48385
+## 2019-12-04   65.2675   65.8275  65.1700    65.4350    67181600      63.03534
 ## 2019-12-05   65.9475   66.4725  65.6825    66.3950    74424400      63.96016
-## 2019-12-06   66.8700   67.7500  66.8250    67.6775   106075600      65.19563
+## 2019-12-06   66.8700   67.7500  66.8250    67.6775   106075600      65.19560
 ## 2019-12-09   67.5000   67.7000  66.2275    66.7300   128042400      64.28286
 ## 
 ## Total NAs: 0 
@@ -598,10 +606,10 @@ init_obs(instruments)</code></pre>
 ## INSTRUMENT: SPY 
 ##            SPY.Open SPY.High SPY.Low SPY.Close SPY.Volume SPY.Adjusted
 ## 2019-12-02   314.59   314.66  311.17    311.64   75767800     282.6761
-## 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7804
+## 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7803
 ## 2019-12-04   310.70   312.12  310.32    311.46   49080000     282.5128
-## 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0208
-## 2019-12-06   314.12   315.31  314.11    314.87   48927000     285.6058
+## 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0209
+## 2019-12-06   314.12   315.31  314.11    314.87   48927000     285.6059
 ## 2019-12-09   314.44   315.18  313.80    313.88   34838500     284.7079
 ## 
 ## Total NAs: 0 
@@ -705,11 +713,11 @@ init_obs(instruments)</code></pre>
 <pre class="r"><code>init_obs(instruments)</code></pre>
 <pre><code>## INSTRUMENT: AAPL 
 ##            AAPL.Open AAPL.High AAPL.Low AAPL.Close AAPL.Volume AAPL.Adjusted
-## 2019-12-02   66.8175   67.0625  65.8625    66.0400    94487200      63.61816
-## 2019-12-03   64.5775   64.8825  64.0725    64.8625   114430400      62.48386
-## 2019-12-04   65.2675   65.8275  65.1700    65.4350    67181600      63.03535
+## 2019-12-02   66.8175   67.0625  65.8625    66.0400    94487200      63.61818
+## 2019-12-03   64.5775   64.8825  64.0725    64.8625   114430400      62.48385
+## 2019-12-04   65.2675   65.8275  65.1700    65.4350    67181600      63.03534
 ## 2019-12-05   65.9475   66.4725  65.6825    66.3950    74424400      63.96016
-## 2019-12-06   66.8700   67.7500  66.8250    67.6775   106075600      65.19563
+## 2019-12-06   66.8700   67.7500  66.8250    67.6775   106075600      65.19560
 ## 2019-12-09   67.5000   67.7000  66.2275    66.7300   128042400      64.28286
 ## 
 ## Total NAs: 0 
@@ -759,10 +767,10 @@ init_obs(instruments)</code></pre>
 ## INSTRUMENT: SPY 
 ##            SPY.Open SPY.High SPY.Low SPY.Close SPY.Volume SPY.Adjusted
 ## 2019-12-02   314.59   314.66  311.17    311.64   75767800     282.6761
-## 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7804
+## 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7803
 ## 2019-12-04   310.70   312.12  310.32    311.46   49080000     282.5128
-## 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0208
-## 2019-12-06   314.12   315.31  314.11    314.87   48927000     285.6058
+## 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0209
+## 2019-12-06   314.12   315.31  314.11    314.87   48927000     285.6059
 ## 2019-12-09   314.44   315.18  313.80    313.88   34838500     284.7079
 ## 
 ## Total NAs: 0 
@@ -839,7 +847,7 @@ master_df &lt;- df_list %&gt;%
   arrange(Date)</code></pre>
 <pre class="r"><code>explore_instruments &lt;- function(instruments, master_df) {
   for (sym in instruments) {
-    cat(&quot;INSTRUMENT:&quot;, sym, &quot;\n&quot;)
+    cat(&quot;\n############################\nINSTRUMENT:&quot;, sym, &quot;\n###########################\n\n&quot;)
     
     instrument_df &lt;- master_df %&gt;% 
       select(Date, starts_with(sym))
@@ -865,17 +873,22 @@ master_df &lt;- df_list %&gt;%
     dup_count &lt;- sum(duplicated(instrument_df$Date))
   }
   
+  cat(&quot;\n###########################\nMASTER DF:\n###########################\n&quot;)
   dplyr::glimpse(master_df)
 }
 explore_instruments(instruments, master_df)</code></pre>
-<pre><code>## INSTRUMENT: AAPL 
+<pre><code>## 
+## ############################
+## INSTRUMENT: AAPL 
+## ###########################
+## 
 ##         Date AAPL.Open AAPL.High AAPL.Low AAPL.Close AAPL.Volume AAPL.Adjusted
 ## 1 2019-12-01        NA        NA       NA         NA          NA            NA
-## 2 2019-12-02   66.8175   67.0625  65.8625    66.0400    94487200      63.61816
-## 3 2019-12-03   64.5775   64.8825  64.0725    64.8625   114430400      62.48386
-## 4 2019-12-04   65.2675   65.8275  65.1700    65.4350    67181600      63.03535
+## 2 2019-12-02   66.8175   67.0625  65.8625    66.0400    94487200      63.61818
+## 3 2019-12-03   64.5775   64.8825  64.0725    64.8625   114430400      62.48385
+## 4 2019-12-04   65.2675   65.8275  65.1700    65.4350    67181600      63.03534
 ## 5 2019-12-05   65.9475   66.4725  65.6825    66.3950    74424400      63.96016
-## 6 2019-12-06   66.8700   67.7500  66.8250    67.6775   106075600      65.19563
+## 6 2019-12-06   66.8700   67.7500  66.8250    67.6775   106075600      65.19560
 ## 
 ## --- Missing Values per Column ---
 ##          Date     AAPL.Open     AAPL.High      AAPL.Low    AAPL.Close 
@@ -896,7 +909,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ## 8  2019-12-25        NA        NA       NA         NA          NA            NA
 ## 9  2019-12-28        NA        NA       NA         NA          NA            NA
 ## 10 2019-12-29        NA        NA       NA         NA          NA            NA
+## 
+## ############################
 ## INSTRUMENT: PSEI.PS 
+## ###########################
+## 
 ##         Date PSEI.PS.Open PSEI.PS.High PSEI.PS.Low PSEI.PS.Close PSEI.PS.Volume
 ## 1 2019-12-01           NA           NA          NA            NA             NA
 ## 2 2019-12-02      7769.26      7877.19     7753.76       7877.19         112900
@@ -942,7 +959,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ## 8              NA               NA
 ## 9              NA               NA
 ## 10             NA               NA
+## 
+## ############################
 ## INSTRUMENT: BTC-USD 
+## ###########################
+## 
 ##         Date BTC-USD.Open BTC-USD.High BTC-USD.Low BTC-USD.Close BTC-USD.Volume
 ## 1 2019-12-01     7571.616     7571.616    7291.342      7424.292    18720708479
 ## 2 2019-12-02     7424.036     7474.819    7233.399      7321.988    17082040706
@@ -965,14 +986,18 @@ explore_instruments(instruments, master_df)</code></pre>
 ##                0                0                0 
 ## 
 ## Total Rows with NAs: 0 
+## 
+## ############################
 ## INSTRUMENT: SPY 
+## ###########################
+## 
 ##         Date SPY.Open SPY.High SPY.Low SPY.Close SPY.Volume SPY.Adjusted
 ## 1 2019-12-01       NA       NA      NA        NA         NA           NA
 ## 2 2019-12-02   314.59   314.66  311.17    311.64   75767800     282.6761
-## 3 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7804
+## 3 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7803
 ## 4 2019-12-04   310.70   312.12  310.32    311.46   49080000     282.5128
-## 5 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0208
-## 6 2019-12-06   314.12   315.31  314.11    314.87   48927000     285.6058
+## 5 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0209
+## 6 2019-12-06   314.12   315.31  314.11    314.87   48927000     285.6059
 ## 
 ## --- Missing Values per Column ---
 ##         Date     SPY.Open     SPY.High      SPY.Low    SPY.Close   SPY.Volume 
@@ -993,7 +1018,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ## 8  2019-12-25       NA       NA      NA        NA         NA           NA
 ## 9  2019-12-28       NA       NA      NA        NA         NA           NA
 ## 10 2019-12-29       NA       NA      NA        NA         NA           NA
+## 
+## ############################
 ## INSTRUMENT: VIX 
+## ###########################
+## 
 ##         Date VIX.Open VIX.High VIX.Low VIX.Close VIX.Volume VIX.Adjusted
 ## 1 2019-12-01       NA       NA      NA        NA         NA           NA
 ## 2 2019-12-02    12.69    15.27   12.55     14.91          0        14.91
@@ -1021,7 +1050,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ## 8  2019-12-28       NA       NA      NA        NA         NA           NA
 ## 9  2019-12-29       NA       NA      NA        NA         NA           NA
 ## 10 2020-01-04       NA       NA      NA        NA         NA           NA
+## 
+## ############################
 ## INSTRUMENT: DGS10 
+## ###########################
+## 
 ##         Date DGS10
 ## 1 2019-12-01    NA
 ## 2 2019-12-02  1.83
@@ -1047,7 +1080,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ## 8  2019-12-28    NA
 ## 9  2019-12-29    NA
 ## 10 2020-01-04    NA
+## 
+## ############################
 ## INSTRUMENT: FEDFUNDS 
+## ###########################
+## 
 ##         Date FEDFUNDS
 ## 1 2019-12-01     1.55
 ## 2 2019-12-02       NA
@@ -1073,7 +1110,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ## 8  2019-12-09       NA
 ## 9  2019-12-10       NA
 ## 10 2019-12-11       NA
+## 
+## ############################
 ## INSTRUMENT: CPIAUCSL 
+## ###########################
+## 
 ##         Date CPIAUCSL
 ## 1 2019-12-01   258.63
 ## 2 2019-12-02       NA
@@ -1099,6 +1140,10 @@ explore_instruments(instruments, master_df)</code></pre>
 ## 8  2019-12-09       NA
 ## 9  2019-12-10       NA
 ## 10 2019-12-11       NA
+## 
+## ###########################
+## MASTER DF:
+## ###########################
 ## Rows: 2,223
 ## Columns: 34
 ## $ Date               &lt;date&gt; 2019-12-01, 2019-12-02, 2019-12-03, 2019-12-04, 20…
@@ -1107,7 +1152,7 @@ explore_instruments(instruments, master_df)</code></pre>
 ## $ AAPL.Low           &lt;dbl&gt; NA, 65.8625, 64.0725, 65.1700, 65.6825, 66.8250, NA…
 ## $ AAPL.Close         &lt;dbl&gt; NA, 66.0400, 64.8625, 65.4350, 66.3950, 67.6775, NA…
 ## $ AAPL.Volume        &lt;dbl&gt; NA, 94487200, 114430400, 67181600, 74424400, 106075…
-## $ AAPL.Adjusted      &lt;dbl&gt; NA, 63.61816, 62.48386, 63.03535, 63.96016, 65.1956…
+## $ AAPL.Adjusted      &lt;dbl&gt; NA, 63.61818, 62.48385, 63.03534, 63.96016, 65.1956…
 ## $ PSEI.PS.Open       &lt;dbl&gt; NA, 7769.26, 7858.96, 7848.53, 7789.74, 7796.44, NA…
 ## $ PSEI.PS.High       &lt;dbl&gt; NA, 7877.19, 7888.46, 7848.53, 7817.97, 7811.19, NA…
 ## $ PSEI.PS.Low        &lt;dbl&gt; NA, 7753.76, 7829.35, 7772.05, 7777.07, 7760.75, NA…
@@ -1125,7 +1170,7 @@ explore_instruments(instruments, master_df)</code></pre>
 ## $ SPY.Low            &lt;dbl&gt; NA, 311.17, 307.13, 310.32, 310.58, 314.11, NA, NA,…
 ## $ SPY.Close          &lt;dbl&gt; NA, 311.64, 309.55, 311.46, 312.02, 314.87, NA, NA,…
 ## $ SPY.Volume         &lt;dbl&gt; NA, 75767800, 73941700, 49080000, 40709000, 4892700…
-## $ SPY.Adjusted       &lt;dbl&gt; NA, 282.6761, 280.7804, 282.5128, 283.0208, 285.605…
+## $ SPY.Adjusted       &lt;dbl&gt; NA, 282.6761, 280.7803, 282.5128, 283.0209, 285.605…
 ## $ VIX.Open           &lt;dbl&gt; NA, 12.69, 14.68, 16.38, 14.46, 14.37, NA, NA, 14.2…
 ## $ VIX.High           &lt;dbl&gt; NA, 15.27, 17.99, 16.40, 15.37, 14.47, NA, NA, 16.0…
 ## $ VIX.Low            &lt;dbl&gt; NA, 12.55, 14.61, 14.12, 14.17, 13.19, NA, NA, 12.2…
@@ -1142,14 +1187,18 @@ master_df &lt;- master_df %&gt;%
   filter(Date &gt;= as.Date(&quot;2020-01-01&quot;))
 
 explore_instruments(instruments, master_df)</code></pre>
-<pre><code>## INSTRUMENT: AAPL 
+<pre><code>## 
+## ############################
+## INSTRUMENT: AAPL 
+## ###########################
+## 
 ##         Date AAPL.Open AAPL.High AAPL.Low AAPL.Close AAPL.Volume AAPL.Adjusted
-## 1 2020-01-01   72.4825    73.420  72.3800    73.4125   100805600      70.72032
-## 2 2020-01-02   74.0600    75.150  73.7975    75.0875   135480400      72.33389
-## 3 2020-01-03   74.2875    75.145  74.1250    74.3575   146322800      71.63065
-## 4 2020-01-04   74.2875    75.145  74.1250    74.3575   146322800      71.63065
-## 5 2020-01-05   74.2875    75.145  74.1250    74.3575   146322800      71.63065
-## 6 2020-01-06   73.4475    74.990  73.1875    74.9500   118387200      72.20141
+## 1 2020-01-01   72.4825    73.420  72.3800    73.4125   100805600      70.72030
+## 2 2020-01-02   74.0600    75.150  73.7975    75.0875   135480400      72.33390
+## 3 2020-01-03   74.2875    75.145  74.1250    74.3575   146322800      71.63064
+## 4 2020-01-04   74.2875    75.145  74.1250    74.3575   146322800      71.63064
+## 5 2020-01-05   74.2875    75.145  74.1250    74.3575   146322800      71.63064
+## 6 2020-01-06   73.4475    74.990  73.1875    74.9500   118387200      72.20143
 ## 
 ## --- Missing Values per Column ---
 ##          Date     AAPL.Open     AAPL.High      AAPL.Low    AAPL.Close 
@@ -1158,7 +1207,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ##             0             0 
 ## 
 ## Total Rows with NAs: 0 
+## 
+## ############################
 ## INSTRUMENT: PSEI.PS 
+## ###########################
+## 
 ##         Date PSEI.PS.Open PSEI.PS.High PSEI.PS.Low PSEI.PS.Close PSEI.PS.Volume
 ## 1 2020-01-01      7848.39      7891.99     7815.26       7815.26         177800
 ## 2 2020-01-02      7721.26      7742.53     7643.98       7742.53         101100
@@ -1181,7 +1234,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ##                0                0                0 
 ## 
 ## Total Rows with NAs: 0 
+## 
+## ############################
 ## INSTRUMENT: BTC-USD 
+## ###########################
+## 
 ##         Date BTC-USD.Open BTC-USD.High BTC-USD.Low BTC-USD.Close BTC-USD.Volume
 ## 1 2020-01-01     7194.892     7254.331    7174.944      7200.174    18565664997
 ## 2 2020-01-02     7202.551     7212.155    6935.270      6985.470    20802083465
@@ -1204,14 +1261,18 @@ explore_instruments(instruments, master_df)</code></pre>
 ##                0                0                0 
 ## 
 ## Total Rows with NAs: 0 
+## 
+## ############################
 ## INSTRUMENT: SPY 
+## ###########################
+## 
 ##         Date SPY.Open SPY.High SPY.Low SPY.Close SPY.Volume SPY.Adjusted
 ## 1 2020-01-01   320.53   322.13  320.15    321.86   57077300     293.3816
-## 2 2020-01-02   323.54   324.89  322.53    324.87   59151200     296.1252
+## 2 2020-01-02   323.54   324.89  322.53    324.87   59151200     296.1253
 ## 3 2020-01-03   321.16   323.64  321.10    322.41   77709700     293.8829
 ## 4 2020-01-04   321.16   323.64  321.10    322.41   77709700     293.8829
 ## 5 2020-01-05   321.16   323.64  321.10    322.41   77709700     293.8829
-## 6 2020-01-06   320.49   323.73  320.36    323.64   55653900     295.0041
+## 6 2020-01-06   320.49   323.73  320.36    323.64   55653900     295.0042
 ## 
 ## --- Missing Values per Column ---
 ##         Date     SPY.Open     SPY.High      SPY.Low    SPY.Close   SPY.Volume 
@@ -1220,7 +1281,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ##            0 
 ## 
 ## Total Rows with NAs: 0 
+## 
+## ############################
 ## INSTRUMENT: VIX 
+## ###########################
+## 
 ##         Date VIX.Open VIX.High VIX.Low VIX.Close VIX.Volume VIX.Adjusted
 ## 1 2020-01-01    14.84    15.39   13.75     13.78          0        13.78
 ## 2 2020-01-02    13.46    13.72   12.42     12.47          0        12.47
@@ -1236,7 +1301,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ##            0 
 ## 
 ## Total Rows with NAs: 0 
+## 
+## ############################
 ## INSTRUMENT: DGS10 
+## ###########################
+## 
 ##         Date DGS10
 ## 1 2020-01-01  1.92
 ## 2 2020-01-02  1.88
@@ -1250,7 +1319,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ##     0     0 
 ## 
 ## Total Rows with NAs: 0 
+## 
+## ############################
 ## INSTRUMENT: FEDFUNDS 
+## ###########################
+## 
 ##         Date FEDFUNDS
 ## 1 2020-01-01     1.55
 ## 2 2020-01-02     1.55
@@ -1264,7 +1337,11 @@ explore_instruments(instruments, master_df)</code></pre>
 ##        0        0 
 ## 
 ## Total Rows with NAs: 0 
+## 
+## ############################
 ## INSTRUMENT: CPIAUCSL 
+## ###########################
+## 
 ##         Date CPIAUCSL
 ## 1 2020-01-01  259.127
 ## 2 2020-01-02  259.127
@@ -1278,6 +1355,10 @@ explore_instruments(instruments, master_df)</code></pre>
 ##        0        0 
 ## 
 ## Total Rows with NAs: 0 
+## 
+## ###########################
+## MASTER DF:
+## ###########################
 ## Rows: 2,192
 ## Columns: 34
 ## $ Date               &lt;date&gt; 2020-01-01, 2020-01-02, 2020-01-03, 2020-01-04, 20…
@@ -1286,7 +1367,7 @@ explore_instruments(instruments, master_df)</code></pre>
 ## $ AAPL.Low           &lt;dbl&gt; 72.3800, 73.7975, 74.1250, 74.1250, 74.1250, 73.187…
 ## $ AAPL.Close         &lt;dbl&gt; 73.4125, 75.0875, 74.3575, 74.3575, 74.3575, 74.950…
 ## $ AAPL.Volume        &lt;dbl&gt; 100805600, 135480400, 146322800, 146322800, 1463228…
-## $ AAPL.Adjusted      &lt;dbl&gt; 70.72032, 72.33389, 71.63065, 71.63065, 71.63065, 7…
+## $ AAPL.Adjusted      &lt;dbl&gt; 70.72030, 72.33390, 71.63064, 71.63064, 71.63064, 7…
 ## $ PSEI.PS.Open       &lt;dbl&gt; 7848.39, 7721.26, 7737.70, 7737.70, 7737.70, 7802.8…
 ## $ PSEI.PS.High       &lt;dbl&gt; 7891.99, 7742.53, 7890.94, 7890.94, 7890.94, 7802.8…
 ## $ PSEI.PS.Low        &lt;dbl&gt; 7815.26, 7643.98, 7737.70, 7737.70, 7737.70, 7697.8…
@@ -1304,7 +1385,7 @@ explore_instruments(instruments, master_df)</code></pre>
 ## $ SPY.Low            &lt;dbl&gt; 320.15, 322.53, 321.10, 321.10, 321.10, 320.36, 322…
 ## $ SPY.Close          &lt;dbl&gt; 321.86, 324.87, 322.41, 322.41, 322.41, 323.64, 322…
 ## $ SPY.Volume         &lt;dbl&gt; 57077300, 59151200, 77709700, 77709700, 77709700, 5…
-## $ SPY.Adjusted       &lt;dbl&gt; 293.3816, 296.1252, 293.8829, 293.8829, 293.8829, 2…
+## $ SPY.Adjusted       &lt;dbl&gt; 293.3816, 296.1253, 293.8829, 293.8829, 293.8829, 2…
 ## $ VIX.Open           &lt;dbl&gt; 14.84, 13.46, 15.01, 15.01, 15.01, 15.45, 13.84, 15…
 ## $ VIX.High           &lt;dbl&gt; 15.39, 13.72, 16.20, 16.20, 16.20, 16.39, 14.46, 15…
 ## $ VIX.Low            &lt;dbl&gt; 13.75, 12.42, 13.13, 13.13, 13.13, 13.54, 13.39, 12…
