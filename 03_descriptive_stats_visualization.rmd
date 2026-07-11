@@ -1,0 +1,99 @@
+# Descriptive Statistics & Visualization
+
+```{r function-descriptive-statistics}
+get_summary_stats <- function(df, target_cols, frequency = "overall") {
+  
+  base_df <- df %>%
+    select(Date, all_of(target_cols)) %>%
+    pivot_longer(cols = -Date, names_to = "Instrument", values_to = "Value")
+  
+  if (frequency == "yearly") {
+    base_df <- base_df %>%
+      mutate(Period = format(Date, "%Y")) %>%
+      group_by(Instrument, Period)
+      
+  } else if (frequency == "quarterly") {
+    base_df <- base_df %>%
+      mutate(Period = paste0(format(Date, "%Y"), "-", quarters(Date))) %>%
+      group_by(Instrument, Period)
+      
+  } else if (frequency == "monthly") {
+    base_df <- base_df %>%
+      mutate(Period = format(Date, "%Y-%m")) %>%
+      group_by(Instrument, Period)
+      
+  } else if (frequency == "seasonal_quarter") {
+    base_df <- base_df %>%
+      mutate(Period = quarters(Date)) %>%
+      group_by(Instrument, Period)
+      
+  } else if (frequency == "seasonal_month") {
+    base_df <- base_df %>%
+      mutate(Period = format(Date, "%m")) %>%
+      group_by(Instrument, Period)
+      
+  } else {
+    base_df <- base_df %>%
+      mutate(Period = "Overall") %>%
+      group_by(Instrument, Period)
+  }
+  
+  summary_stats <- base_df %>%
+    summarise(
+      Mean = mean(Value, na.rm = TRUE),
+      Median = median(Value, na.rm = TRUE),
+      Variance = var(Value, na.rm = TRUE),
+      Std_Dev = sd(Value, na.rm = TRUE),
+      Min = min(Value, na.rm = TRUE),
+      Max = max(Value, na.rm = TRUE),
+      Range = Max - Min,
+      Skewness = skewness(Value, na.rm = TRUE),
+      Kurtosis = kurtosis(Value, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(across(where(is.numeric), ~round(., 2)))
+  
+  if (frequency != "overall") {
+    summary_stats <- summary_stats %>%
+      pivot_wider(
+        names_from = Instrument,
+        values_from = c(Mean, Median, Variance, Std_Dev, Min, Max, Range, Skewness, Kurtosis),
+        names_glue = "{Instrument}_{.value}"
+      ) %>%
+      arrange(Period)
+  }
+  
+  return(summary_stats)
+}
+
+target_cols <- c(
+  "AAPL.Close", 
+  "PSEI.PS.Close", 
+  "BTC-USD.Close", 
+  "SPY.Close", 
+  "VIX.Close", 
+  "DGS10", 
+  "FEDFUNDS", 
+  "CPIAUCSL"
+)
+
+print(get_summary_stats(master_df, target_cols, frequency = "overall"))
+```
+```{r descriptive-statistics-yearly}
+print(get_summary_stats(master_df, target_cols, "yearly"))
+```
+```{r descriptive-statistics-quarterly}
+print(get_summary_stats(master_df, target_cols, "quarterly"))
+```
+```{r descriptive-statistics-monthly}
+print(get_summary_stats(master_df, target_cols, "monthly"))
+```
+
+```{r descriptive-statistics-seasonal_quarter}
+print(get_summary_stats(master_df, target_cols, "seasonal_quarter"))
+```
+
+```{r descriptive-statistics-seasonal_monthly}
+print(get_summary_stats(master_df, target_cols, "seasonal_month"))
+```
+

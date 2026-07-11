@@ -1,11 +1,18 @@
 ---
-title: "Main"
+title: "Main Integrated Financial Report"
 author: "Roan Campo, Denzel Macayan, Bea Uy, Miguel Uy"
 date: "2026-07-01"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
 ---
+To run, use the `knit` button shown above in the ribbon. The purpose of this `Main.rmd` is to atomize the sections to parts. This will create
 
-```{r setup, include=FALSE}
+You can run the child `.rmd` files in order in the same r session to get the output. Remember, for long outputs, you can hide them in RStudio.
+
+```{r global-setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -26,9 +33,7 @@ invisible(lapply(required_packages, library, character.only = TRUE))
 eodhdR2::set_token("6a4d1a69783631.62359123")
 ```
 
-```{r set-date}
-start_date <- as.Date("2019-12-01")
-end_date <- as.Date("2025-12-31")
+```{r child-01-data-acquisition, echo=TRUE, child='01_data_acquisition_cleaning.rmd'}
 ```
 
 ```{r fetch-pse-data}

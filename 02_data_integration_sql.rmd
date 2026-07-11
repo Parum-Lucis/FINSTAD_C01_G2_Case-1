@@ -1,0 +1,64 @@
+
+
+# Data Integration
+
+```{r convert-to-df}
+df_list <- map(instruments, function(sym) {
+  
+  data_obj <- get(sym)
+  
+  clean_df <- as.data.frame(data_obj) %>% 
+    rownames_to_column(var = "Date") %>% 
+    mutate(Date = as.Date(Date))
+  
+  return(clean_df)
+})
+
+master_df <- df_list %>% 
+  reduce(full_join, by = "Date") %>% 
+  arrange(Date)
+```
+
+```{r explore-master-df}
+explore_instruments <- function(instruments, master_df) {
+  for (sym in instruments) {
+    cat("INSTRUMENT:", sym, "\n")
+    
+    instrument_df <- master_df %>% 
+      select(Date, starts_with(sym))
+    
+    print(head(instrument_df))
+    cat("\n")
+    
+    cat("--- Missing Values per Column ---\n")
+    print(colSums(is.na(instrument_df)))
+    cat("\n")
+    
+    missing_rows <- instrument_df %>%
+      filter(if_any(starts_with(sym), is.na))
+    
+    total_missing <- nrow(missing_rows)
+    cat("Total Rows with NAs:", total_missing, "\n")
+    
+    if (total_missing > 0) {
+      cat("--- Top 10 Missing Rows ---\n")
+      print(head(missing_rows, 10))
+    }
+    
+    dup_count <- sum(duplicated(instrument_df$Date))
+  }
+  
+  dplyr::glimpse(master_df)
+}
+explore_instruments(instruments, master_df)
+```
+
+```{r fix-missing-master-df}
+master_df <- master_df %>%
+  fill(everything(), .direction = "down")
+
+master_df <- master_df %>%
+  filter(Date >= as.Date("2020-01-01"))
+
+explore_instruments(instruments, master_df)
+```

@@ -1,0 +1,29 @@
+# Package Installation
+
+
+```{r env-setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Install the following packages:
+```{r set-dependencies}
+required_packages <- c("tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod")
+
+for (pkg in required_packages) {
+  
+  if (!require(pkg, character.only = TRUE)) {
+    
+    install.packages(pkg)
+
+    library(pkg, character.only = TRUE)
+  }
+}
+```
+
+# Global Variables
+
+Set up the following dates:
+```{r set-date}
+start_date <- as.Date("2019-12-01")
+end_date <- as.Date("2025-12-31")
+```
