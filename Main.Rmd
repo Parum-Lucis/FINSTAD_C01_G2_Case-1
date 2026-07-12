@@ -159,12 +159,36 @@ df_list <- map(instruments, function(sym) {
   
   return(clean_df)
 })
+names(df_list) <- instruments
 
-master_df <- df_list %>% 
+master_df <- df_list %>%
   compact() %>%
   reduce(full_join, by = "Date") %>% 
   arrange(Date) %>% 
   fill(-Date, .direction = "down")
+```
+
+```{r bea-pal-halt-detect}
+# Detect genuine multi-day trading gaps in PAL's native calendar -- must run
+# on df_list (pre-join, pre-fill) since the gap is only visible as an absence
+# of rows here. Once joined/filled downstream, it looks like ordinary data.
+# Threshold: >10 calendar days between consecutive real PAL prints, longer
+# than any routine PSE weekend/holiday cluster.
+pal_native <- df_list[["PAL"]] %>% arrange(Date)
+pal_gap_idx <- which(as.numeric(diff(pal_native$Date)) > 10)
+
+pal_halt_windows <- tibble(
+  halt_start = pal_native$Date[pal_gap_idx] + 1,
+  halt_end   = pal_native$Date[pal_gap_idx + 1] - 1
+)
+
+cat("Detected PAL trading halt window(s):\n")
+print(pal_halt_windows)
+cat("(Expected: 2021-06-17 to 2022-03-27 -- PSE audit-opinion suspension)\n")
+
+in_pal_halt <- function(dates) {
+  purrr::map_lgl(dates, function(d) any(d >= pal_halt_windows$halt_start & d <= pal_halt_windows$halt_end))
+}
 ```
 
 ```{r log-returns}
@@ -218,6 +242,17 @@ master_df <- master_df %>%
   filter(Date >= as.Date("2020-01-01"))
 
 explore_instruments(instruments, master_df)
+```
+
+```{r bea-pal-halt-mask-master}
+# fill() above forward-filled PAL's price across its 285-day suspension,
+# which manufactures ~193 fake zero-return trading days and deflates PAL's
+# measured volatility/correlation. Re-NA those dates in the return column so
+# downstream stats/correlations treat the halt as genuinely missing, not
+# "unchanged." (Nothing before this masking step needed the raw price after
+# log-returns already collapsed PAL.Adjusted into PAL.LogAdj.)
+master_df <- master_df %>%
+  mutate(PAL.LogAdj = if_else(in_pal_halt(Date), NA_real_, PAL.LogAdj))
 ```
 
 ```{r function-descriptive-statistics}
@@ -311,7 +346,20 @@ cat("Note: PSE (PAL) and NYMEX (WTI) calendars differ from NYSE (UAL).\n")
 cat("A left_join on UAL's calendar will introduce NAs on days PAL/WTI didn't print,\n")
 cat("which we carry forward via fill() rather than dropping UAL rows.\n")
 ```
+The difference in rows could be explained by the following:
+- UAL is based on NYSE weekday calendar, which is closed on weekends and US market holidays. 
+- PAL is based on PSE weekday calendar, which is closed on weekends and PH holidays.
+- PAL had a 285-day trading suspension imposed by the PSE between (2021-06-17 to 2022-03-28),
+  as its financial statements had violated a rule. This was during COVID-19 travel restrictions.
+- DCOILWTICO is from FRED instead of a stock market trading calendar. 
 
+Given the difference, UAL will be used as basis for the dates, and all the other data will be
+transformed to adhere to the dates of UAL. Fill is used to fill in the missing data using the carry forward method.
+This is appropriate for routine weekend/holiday gaps, but not for PAL's 285-day suspension: carrying
+its last pre-suspension price forward for 9 months would manufacture ~193 fake zero-return trading
+days and artificially deflate PAL's measured volatility and correlation with the other assets. That
+window is therefore detected programmatically and masked back to NA immediately after fill() runs,
+so it is excluded from PAL's return-based calculations below rather than treated as "unchanged."
 ```{r bea-leftjoin1}
 fuel_leftjoin_df <- df_list[["UAL"]] %>%
   select(Date, UAL_Adjusted = `UAL.Adjusted`) %>%
@@ -319,6 +367,7 @@ fuel_leftjoin_df <- df_list[["UAL"]] %>%
   left_join(df_list[["DCOILWTICO"]] %>% select(Date, WTI = DCOILWTICO), by = "Date") %>%
   arrange(Date) %>%
   fill(PAL_Adjusted, WTI, .direction = "down") %>%
+  mutate(PAL_Adjusted = if_else(in_pal_halt(Date), NA_real_, PAL_Adjusted)) %>%
   mutate(
     UAL_ret = c(NA, diff(log(UAL_Adjusted))),
     PAL_ret = c(NA, diff(log(PAL_Adjusted))),
@@ -360,6 +409,7 @@ beta_leftjoin_df <- df_list[["SPY"]] %>%
   left_join(df_list[["VIX"]] %>% select(Date, VIX_Adjusted = `VIX.Adjusted`), by = "Date") %>%
   arrange(Date) %>%
   fill(-Date, .direction = "down") %>%
+  mutate(PAL_Adjusted = if_else(in_pal_halt(Date), NA_real_, PAL_Adjusted)) %>%
   mutate(
     SPY_ret = c(NA, diff(log(SPY_Adjusted))),
     UAL_ret = c(NA, diff(log(UAL_Adjusted))),
