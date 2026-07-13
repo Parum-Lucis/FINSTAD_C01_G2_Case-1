@@ -91,7 +91,7 @@ instruments <- c("UAL", "PAL", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CP
 init_obs <- function(ticker_list, sample_size = 3){
    for (sym in ticker_list) {
     data_obj <- get(sym)
-    cat("INSTRUMENT:", sym, "\n")
+    cat("INSTRUMENT:", sym, "| Total Observations:", nrow(data_obj), "\n")
     
     print(head(data_obj))
     cat("\n")
@@ -184,7 +184,8 @@ explore_instruments <- function(instruments, master_df) {
     instrument_df <- master_df %>% 
       select(Date, starts_with(sym))
     
-    print(instrument_df, n = 6)
+    print(head(instrument_df), n = 3)
+    print(tail(instrument_df), n = 3)
     cat("\n")
     
     cat("--- Missing Values per Column ---\n")
@@ -319,6 +320,7 @@ fuel_leftjoin_df <- df_list[["UAL"]] %>%
   left_join(df_list[["DCOILWTICO"]] %>% select(Date, WTI = DCOILWTICO), by = "Date") %>%
   arrange(Date) %>%
   fill(PAL_Adjusted, WTI, .direction = "down") %>%
+  filter(format(Date, "%Y-%m") != "2019-12") %>%
   mutate(
     UAL_ret = c(NA, diff(log(UAL_Adjusted))),
     PAL_ret = c(NA, diff(log(PAL_Adjusted))),
@@ -346,48 +348,6 @@ cat("UAL oil-return coefficient:", round(ual_oil_beta, 4), "| p-value:", round(u
 cat("PAL oil-return coefficient:", round(pal_oil_beta, 4), "| p-value:", round(pal_oil_p, 4), "\n")
 ```
 
-```{r bea-leftjoin2-pre-obs VIX-regime-beta}
-cat("SPY:", nrow(df_list[["SPY"]]), "rows | VIX:", nrow(df_list[["VIX"]]), "rows\n")
-cat("UAL:", nrow(df_list[["UAL"]]), "rows | PAL:", nrow(df_list[["PAL"]]), "rows\n")
-cat("PAL (PSE calendar) is the outlier here and will pick up NAs, filled forward.\n")
-```
-
-```{r bea-leftjoin2}
-beta_leftjoin_df <- df_list[["SPY"]] %>%
-  select(Date, SPY_Adjusted = `SPY.Adjusted`) %>%
-  left_join(df_list[["UAL"]] %>% select(Date, UAL_Adjusted = `UAL.Adjusted`), by = "Date") %>%
-  left_join(df_list[["PAL"]] %>% select(Date, PAL_Adjusted = `PAL.Adjusted`), by = "Date") %>%
-  left_join(df_list[["VIX"]] %>% select(Date, VIX_Adjusted = `VIX.Adjusted`), by = "Date") %>%
-  arrange(Date) %>%
-  fill(-Date, .direction = "down") %>%
-  mutate(
-    SPY_ret = c(NA, diff(log(SPY_Adjusted))),
-    UAL_ret = c(NA, diff(log(UAL_Adjusted))),
-    PAL_ret = c(NA, diff(log(PAL_Adjusted))),
-    vix_regime = if_else(VIX_Adjusted >= median(VIX_Adjusted, na.rm = TRUE), "High VIX", "Low VIX")
-  ) %>%
-  filter(!is.na(SPY_ret), !is.na(UAL_ret), !is.na(PAL_ret))
-
-beta_by_regime <- beta_leftjoin_df %>%
-  group_by(vix_regime) %>%
-  summarise(
-    UAL_beta = cov(UAL_ret, SPY_ret, use = "complete.obs") / var(SPY_ret, na.rm = TRUE),
-    PAL_beta = cov(PAL_ret, SPY_ret, use = "complete.obs") / var(SPY_ret, na.rm = TRUE),
-    n_days = n(), .groups = "drop"
-  )
-print(beta_by_regime)
-```
-
-```{r bea-leftjoin2-post-obs}
-ual_high <- beta_by_regime$UAL_beta[beta_by_regime$vix_regime == "High VIX"]
-ual_low  <- beta_by_regime$UAL_beta[beta_by_regime$vix_regime == "Low VIX"]
-pal_high <- beta_by_regime$PAL_beta[beta_by_regime$vix_regime == "High VIX"]
-pal_low  <- beta_by_regime$PAL_beta[beta_by_regime$vix_regime == "Low VIX"]
-
-cat("UAL beta -- High VIX:", round(ual_high, 3), "| Low VIX:", round(ual_low, 3), "\n")
-cat("PAL beta -- High VIX:", round(pal_high, 3), "| Low VIX:", round(pal_low, 3), "\n")
-```
-
 ```{r bea-innerjoin-pre-obs BTC/airline correlation}
 cat("BTC-USD:", nrow(df_list[["BTC-USD"]]), "rows | UAL:", nrow(df_list[["UAL"]]),
     "rows | PAL:", nrow(df_list[["PAL"]]), "rows\n")
@@ -400,6 +360,7 @@ btc_innerjoin_df <- df_list[["BTC-USD"]] %>%
   select(Date, BTC_Adjusted = `BTC-USD.Adjusted`) %>%
   inner_join(df_list[["UAL"]] %>% select(Date, UAL_Adjusted = `UAL.Adjusted`), by = "Date") %>%
   inner_join(df_list[["PAL"]] %>% select(Date, PAL_Adjusted = `PAL.Adjusted`), by = "Date") %>%
+  filter(format(Date, "%Y-%m") != "2019-12") %>%
   arrange(Date) %>%
   mutate(
     BTC_ret = c(NA, diff(log(BTC_Adjusted))),
@@ -433,10 +394,12 @@ cat("anti_join surfaces which days diverge and whether the gap clusters seasonal
 ```{r bea-antijoin holiday-divergence}
 pal_only_days <- df_list[["PAL"]] %>% select(Date) %>%
   anti_join(df_list[["UAL"]] %>% select(Date), by = "Date") %>%
+  filter(format(Date, "%Y-%m") != "2019-12") %>%
   mutate(market = "PSE open, NYSE closed")
 
 ual_only_days <- df_list[["UAL"]] %>% select(Date) %>%
   anti_join(df_list[["PAL"]] %>% select(Date), by = "Date") %>%
+  filter(format(Date, "%Y-%m") != "2019-12") %>%
   mutate(market = "NYSE open, PSE closed")
 
 holiday_divergence_df <- bind_rows(pal_only_days, ual_only_days) %>% arrange(Date)
@@ -447,37 +410,6 @@ print(holiday_divergence_df, n = 20)
 cat("PSE-only trading days:", nrow(pal_only_days), "\n")
 cat("NYSE-only trading days:", nrow(ual_only_days), "\n")
 cat("These", nrow(holiday_divergence_df), "days are exactly what an inner_join would drop.\n")
-```
-
-```{r bea-final-dataset}
-final_analysis_df <- tibble(
-  join_type = c("left_join","left_join","left_join","left_join","left_join","left_join",
-                "inner_join","inner_join","inner_join","anti_join","anti_join"),
-  analysis = c("Fuel pass-through","Fuel pass-through","VIX-regime beta","VIX-regime beta",
-               "VIX-regime beta","VIX-regime beta","BTC-airline correlation",
-               "BTC-airline correlation","BTC-airline correlation",
-               "Holiday divergence","Holiday divergence"),
-  metric_name = c("UAL oil-return beta","PAL oil-return beta","UAL beta (High VIX)",
-                   "UAL beta (Low VIX)","PAL beta (High VIX)","PAL beta (Low VIX)",
-                   "BTC-UAL correlation","BTC-PAL correlation","UAL-PAL correlation",
-                   "PSE-only days","NYSE-only days"),
-  value = c(ual_oil_beta, pal_oil_beta, ual_high, ual_low, pal_high, pal_low,
-            btc_ual_cor, btc_pal_cor, ual_pal_cor, nrow(pal_only_days), nrow(ual_only_days)),
-  rows_used = c(nrow(fuel_leftjoin_df), nrow(fuel_leftjoin_df),
-                sum(beta_leftjoin_df$vix_regime == "High VIX"), sum(beta_leftjoin_df$vix_regime == "Low VIX"),
-                sum(beta_leftjoin_df$vix_regime == "High VIX"), sum(beta_leftjoin_df$vix_regime == "Low VIX"),
-                n_common, n_common, n_common, nrow(pal_only_days), nrow(ual_only_days))
-) %>% mutate(value = round(value, 4))
-
-print(final_analysis_df, n = Inf)
-```
-
-```{r final-dataset-obs}
-cat("Total rows:", nrow(final_analysis_df), "| Join types:",
-    paste(unique(final_analysis_df$join_type), collapse = ", "), "\n\n")
-cat("left_join maximized sample size for regression/beta work by tolerating small\n")
-cat("calendar mismatches; inner_join gave a clean but smaller-sample correlation;\n")
-cat("anti_join served as the audit step tying the two together.\n")
 ```
 
 
