@@ -56,10 +56,12 @@ target_cols <- c(
   "PAL.LogAdj", 
   "BTC-USD.LogAdj", 
   "SPY.LogAdj", 
-  "VIX.LogAdj", 
+  "VIX.LogAdj",
+  "VIX.Adjusted",
   "DGS10", 
   "FEDFUNDS", 
-  "CPIAUCSL"
+  "CPIAUCSL",
+  "DGS2"
 )
 
 print(get_summary_stats(master_df, target_cols, frequency = "overall"))

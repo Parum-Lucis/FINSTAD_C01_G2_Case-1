@@ -46,7 +46,8 @@ getSymbols(yahoo_tickers, src = "yahoo", from = start_date, to = end_date)
 fred_tickers <- c(
   "DGS10",
   "FEDFUNDS",
-  "CPIAUCSL"
+  "CPIAUCSL",
+  "DGS2"
 )
 
 getSymbols(fred_tickers, src = "FRED")
@@ -54,9 +55,11 @@ getSymbols(fred_tickers, src = "FRED")
 DGS10 <- window(DGS10, start = start_date, end = end_date)
 FEDFUNDS <- window(FEDFUNDS, start = start_date, end = end_date)
 CPIAUCSL <- window(CPIAUCSL, start = start_date, end = end_date)
+DGS2 <- window(DGS2, start = start_date, end = end_date)
 ```
 ```{r init-obs}
-instruments <- c("UAL", "PAL", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL")
+instruments <- c("UAL", "PAL", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL", "DGS2")
+
 init_obs <- function(ticker_list, sample_size = 3){
    for (sym in ticker_list) {
     data_obj <- get(sym)

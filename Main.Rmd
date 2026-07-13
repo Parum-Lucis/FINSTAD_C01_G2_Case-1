@@ -9,7 +9,6 @@ output:
     number_sections: true
 ---
 To run, use the `knit` button shown above in the ribbon. The purpose of this `Main.rmd` is to atomize the sections to parts. This will create
-
 You can run the child `.rmd` files in order in the same r session to get the output. Remember, for long outputs, you can hide them in RStudio.
 
 ```{r child-00-env-setup, echo=TRUE, child='00_env_setup.rmd'}
@@ -24,5 +23,5 @@ You can run the child `.rmd` files in order in the same r session to get the out
 ```{r child-03-descriptive-stats-visualization, echo=TRUE, child='03_descriptive_stats_visualization.rmd'}
 ```
 
-```{r child-04-exploratory-analysis, echo=TRUE, child='04_exploratory_analysis.rmd'}
+```{r child-06-financial-investigation, echo=TRUE, child='06_financial_investigation.rmd'}
 ```

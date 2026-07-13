@@ -1,0 +1,366 @@
+# SQL Based Financial Investigation
+
+## Framework
+
+Before executing the database queries, its best to define the theoretical framework driving them. This section is split into two sub frameworks: 
+
+ - **The Neoclassical Economics (NCE) Paradigm** - classic financial concepts that treats the financial system as a linear, rational, mechanical engine that naturally tends toward a stable equilibrium.
+ - **The Complex Adaptive Systems (CAS) Paradigm** - it views markets not as sterile machines, but as biological ecosystems where feedback loops, friction, and shifting participant behavior constantly warp the environment out of equilibrium.
+
+Here are financial mechanics for the SQL Based Investigations
+| Financial Mechanic  | NCE Framework                         | CAS Framework                         |
+| :-----------------  | :------------------------------------ | :------------------------------------ |
+| Price Movement      | Random Walk / Normal Distribution     | Anomalous Diffusion & Fat Tails       |
+| Risk & Correlation  | Static Modern Portfolio Theory (MPT)  | Volatility Regimes & Convergence      |
+| Macro Baseline      | Single-Point Risk-Free Rate (CAPM)    | Yield Curve Dimensional Topology      |
+
+
+## SQL Investigations
+
+Side note, every SQL Investigation has fixed pattern set by the instructor:
+Objective, Code, Output, Financial Investigation. This will be shorten to OCOFI
+
+
+Outline:
+### Financial Analysis: 
+Models how the economy works based on the two paradigms.
+
+#### Characterizing Price Movements
+
+**Main point**: Modeling how financial instruments move is essential to understanding how they move.
+
+##### NCE: Random Walk and Normal Distribution
+
+**Def. Random Walk**: Asset price movements are modeled as Geometric Brownian motion where log-returns are independent and identically distributed normal random variables - a random walk. 
+
+Reference: https://www.investopedia.com/terms/r/randomwalktheory.asp
+
+**Log-Adjacent-Returns**:
+```{r visualize-random-walks-log-adj,  fig.height = 15}
+long_returns <- master_df %>%
+  select(Date, ends_with(".LogAdj")) %>%
+  pivot_longer(cols = -Date, names_to="Financial_Instrument", values_to = "Log_Return")
+  
+random_walks <- ggplot(
+  long_returns,
+  aes(
+    x = Date, 
+    y = Log_Return, 
+    color = Financial_Instrument)
+  ) +
+  geom_line(
+    alpha = 0.6, 
+    show.legend = TRUE
+  ) +
+  facet_wrap(
+    ~ Financial_Instrument, 
+    scales = "free_y",
+    ncol = 1
+  ) +
+  labs(
+    title = "Historical Log Returns Across All Instruments",
+    subtitle = "Faceted view with independent y-axes",
+    x = "Date",
+    y = "Log Return"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(face = "bold", size = 10),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+ggplotly(random_walks)
+```
+
+
+**Def. Normal Distribution**: 
+
+**Normal distribution**:
+```{r normal-distribution}
+long_returns <- master_df %>%
+  select(Date, ends_with(".LogAdj")) %>%
+  pivot_longer(cols = -Date, names_to="Financial_Instrument", values_to = "Log_Return")
+
+normal_dist <- long_returns %>%
+  group_by("Financial_Instrument") %>%
+  reframe(
+    Log_Return = seq(min(Log_Return), max(Log_Return), length.out = 200),
+    Density = dnorm(Log_Return, mean = mean(Log_Return), sd = sd(Log_Return))
+  )
+
+normal_distribution <- ggplot() +
+  geom_histogram(
+    data=long_returns,
+    aes(
+      x = Log_Return,
+      y = after_stat(density)
+    ),
+    bins = 200,
+    fill = "gray40",
+    color = "white",
+    alpha = 0.5
+  ) + 
+  geom_density(
+    data = long_returns, 
+    aes(
+      x = Log_Return, 
+      color = "Empirical Density"
+    ), 
+    size = 0.8
+  ) + 
+  geom_line(data = normal_dist, aes(x = Log_Return, y = Density, color = "Theoretical Normal"), 
+            size = 0.9, linetype = "dashed") +
+  # Separation by Instrument
+  facet_wrap(~ Financial_Instrument, scales = "free", ncol = 2) +
+  scale_color_manual(values = c("Empirical Density" = "#1f77b4", "Theoretical Normal" = "#d62728")) +
+  labs(
+    title = "Empirical Log Returns vs. Theoretical Normal Distributions",
+    subtitle = "Assessing Fat Tails vs. Gaussian Normality across assets",
+    x = "Log Return",
+    y = "Density",
+    color = "Curve Type"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 10)
+  )
+
+overall_sd <- sd(long_returns$Log_Return, na.rm = TRUE)
+overall_mean <- mean(long_returns$Log_Return, na.rm = TRUE)
+
+normal_distribution_zoomed <- normal_distribution +
+  coord_cartesian(
+    xlim = c(overall_mean - 1.5 * overall_sd, overall_mean + 1.5 * overall_sd)
+  )
+
+ggplotly(normal_distribution_zoomed)
+```
+
+```{r left-risk-tail}
+left_tail <- ggplot() +
+  geom_histogram(data = log_returns, aes(x = Log_Return, y = after_stat(density)), 
+                 bins = 100, fill = "gray40", color = "white", alpha = 0.5) +
+  facet_wrap(~ Financial_Instrument, scales = "free", ncol = 2) +
+  
+  # ZOOMING IN: Focus precisely on the extreme left tail (e.g., -20% to -5% returns)
+  coord_cartesian(xlim = c(-0.25, -0.05)) + 
+  
+  labs(
+    title = "Extreme Negative Tail Risk Details",
+    subtitle = "Zoomed coordinate mapping without discarding outlier rows",
+    x = "Log Return",
+    y = "Density"
+  ) +
+  theme_minimal()
+
+ggplotly(left_tail)
+```
+
+```{r right-risk-tail}
+right_tail <- ggplot() +
+  geom_histogram(data = log_returns, aes(x = Log_Return, y = after_stat(density)), 
+                 bins = 100, fill = "gray40", color = "white", alpha = 0.5) +
+  facet_wrap(~ Financial_Instrument, scales = "free", ncol = 2) +
+  
+  # ZOOMING IN: Focus precisely on the extreme left tail (e.g., -20% to -5% returns)
+  coord_cartesian(xlim = c(0.05, 0.25)) + 
+  
+  labs(
+    title = "Extreme Negative Tail Risk Details",
+    subtitle = "Zoomed coordinate mapping without discarding outlier rows",
+    x = "Log Return",
+    y = "Density"
+  ) +
+  theme_minimal()
+
+ggplotly(right_tail)
+```
+
+##### CAS: Anomalous Diffusion & Fat Tails  
+
+**Def. Fat Tails** 
+
+**Fat Tails**:
+```{r fat-tail-verification}
+
+# Using your long-format log returns
+long_log_returns <- master_df %>%
+  select(Date, ends_with(".LogAdj")) %>%
+  pivot_longer(cols = -Date, names_to = "Financial_Instrument", values_to = "Log_Return")
+
+
+# Generate baseline normal curves for comparison
+normal_bounds <- long_log_returns %>%
+  group_by(Financial_Instrument) %>%
+  reframe(
+    Log_Return = seq(min(Log_Return), max(Log_Return), length.out = 300),
+    Density = dnorm(Log_Return, mean = mean(Log_Return), sd = sd(Log_Return))
+  )
+
+# Plot with log-scaled density to expose the Fat Tails
+cas_plot <- ggplot() +
+  geom_density(data = long_log_returns, aes(x = Log_Return, color =Financial_Instrument), size = 0.5, alpha=0.6) +
+  geom_line(data = normal_bounds, aes(x = Log_Return, y = Density, color = "Theoretical NCE (Normal)"), linetype = "dashed", size = 0.5) +
+  facet_wrap(~ Financial_Instrument, scales = "free", ncol = 2) +
+  labs(
+    title = "Fat Tail Verification (Log-Scale Density)",
+    subtitle = "Straight lines/bowing in the outer wings reveal power-law fat tails",
+    x = "Log Return",
+    y = "Log(Density)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
+
+ggplotly(cas_plot)
+```
+
+**Def. Anamalous Diffusion**:
+
+**Anamalous Diffusion**:
+```{r anamalous-diffusion-visualization}
+# Define the time horizons in days to evaluate variance scaling
+horizons <- c(1, 5, 10, 20, 40, 60, 80, 120)
+
+# Reshape master_df into long format and drop NA rows
+long_logs <- master_df %>%
+  select(Date, ends_with(".LogAdj")) %>%
+  pivot_longer(cols = -Date, names_to = "Instrument", values_to = "Log_Return") %>%
+  filter(!is.na(Log_Return))
+
+# Calculate Empirical Variance across all horizons for each asset
+empirical_scaling <- map_dfr(horizons, function(h) {
+  long_logs %>%
+    group_by(Instrument) %>%
+    arrange(Date) %>%
+    # Calculate rolling h-day log returns using a rolling sum
+    mutate(H_Return = rollsum(Log_Return, k = h, fill = NA, align = "right")) %>%
+    filter(!is.na(H_Return)) %>%
+    summarise(Variance = var(H_Return), .groups = "drop") %>%
+    mutate(Horizon = h, Type = "Empirical CAS")
+})
+
+# Calculate Theoretical NCE Variance Scaling baseline (Linear scaling: Var_h = h * Var_1)
+theoretical_scaling <- empirical_scaling %>%
+  filter(Horizon == 1) %>%
+  select(Instrument, Base_Var = Variance) %>%
+  cross_join(data.frame(Horizon = horizons)) %>%
+  mutate(
+    Variance = Horizon * Base_Var,
+    Type = "Theoretical NCE (Linear)"
+  ) %>%
+  select(Instrument, Variance, Horizon, Type)
+
+# Combine both data sets for a direct comparison
+all_assets_scaling <- bind_rows(empirical_scaling, theoretical_scaling)
+
+# Visualization
+anamalous_diffusion <- ggplot(
+  all_assets_scaling, 
+  aes(
+    x = Horizon, 
+    y = Variance, 
+    color = Type, 
+    linetype = Type
+  )) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ Instrument, scales = "free_y", ncol = 2) +
+  
+  # Log-Log Scale: Essential to spot power laws and Hurst exponent slopes
+  scale_x_log10(breaks = horizons) +
+  scale_y_log10() +
+  
+  scale_color_manual(values = c("Empirical CAS" = "#00b4d8", "Theoretical NCE (Linear)" = "#7209b7")) +
+  labs(
+    title = "Anomalous Diffusion Matrix: Variance Scaling Across All Assets",
+    subtitle = "Divergence from the purple line reveals market memory & systemic friction",
+    x = "Log(Time Horizon in Days)",
+    y = "Log(Variance of Compound Returns)",
+    color = "Framework Paradigm"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 10),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+ggplotly(anamalous_diffusion)
+```
+
+##### Comparison and Synthesis
+
+#### Risk & Covariance: 
+**Main point**
+##### NCE: Static Modern Portfolio Theory (MPT)
+**Def. Modern Portfolio Theory**:
+
+```{r }
+mpt_assets <- master_df %>%
+  select(UAL.LogAdj, PAL.LogAdj, `BTC-USD.LogAdj`, SPY.LogAdj) %>%
+  drop_na()
+
+expected_returns <- colMeans(mpt_assets) * 100 # Expressed as %
+print("--- Expected Daily Returns (%) ---")
+print(round(expected_returns, 4))
+
+covariance_matrix <- cov(mpt_assets)
+print("--- Static Covariance Matrix ---")
+print(round(covariance_matrix, 6))
+
+correlation_matrix <- cor(mpt_assets)
+```
+
+##### CAS
+      - Def. Volatitlity Regimes
+      - Def. Convergence
+      - OCOFI
+##### Comparison and Synthesis
+    
+    
+   - Macro Baseline:
+    - Main point
+    - NCE:
+      - Def. CAPM
+      - OCOFI
+    - CAS:
+      - Def. Yield Curve Dimensional Topology
+      - OCOFI
+    - Comparison and Synthesis
+   - Market Efficiency / Information Movement:
+    - Main point
+    - NCE:
+      - Def. Perfect Information / Zero Friction
+      - OCOFI
+    - CAS:
+      - Def. Relativistic Arbitrage
+      - OCOFI
+    - Comparison and Synthesis
+   - Portfolio Sizing:
+    - Main point
+    - NCE:
+      - Def. Mean-Variance Optimization
+      - OCOFI
+    - CAS:
+      - Fundamental Law of Active Management
+      - OCOFI
+    - Comparison and Synthesis
+ - Portfolio Investment Specific:
+  - Mainpoint: Recommend an allocation of USD 1,000,000 among the selected U.S. asset, Philippine asset, cryptocurrency, and cash. Justify your recommendation using evidence from the analysis.
+  - Points from the previous section
+  - Sections of SQL code that provide additional insight.
+
+
+## References:
+[1] Bouchaud, J. P., Farmer, J. D., & Lillo, F. (2009). "How Markets Slowly Digest Large Trading Orders." Handbook of Financial Markets: Dynamics and Evolution, 57–160.
+[2] Fama, E. F. (1970). "Efficient Capital Markets: A Review of Theory and Empirical Work." The Journal of Finance, 25(2), 383–417.
+[3] Grinold, R. C. (1989). "The Fundamental Law of Active Management." The Journal of Portfolio Management, 15(3), 30–38.
+[4] Litterman, R., & Scheinkman, J. (1991). "Common Factors Affecting Bond Returns." The Journal of Fixed Income, 1(1), 54–61.
+[5] Mandelbrot, B. (1963). "The Variation of Certain Speculative Prices." The Journal of Business, 36(4), 394–419.
+[6] Markowitz, H. (1952). "Portfolio Selection." The Journal of Finance, 7(1), 77–91.
+[7] Sharpe, W. F. (1964). "Capital Asset Prices: A Theory of Market Equilibrium under Conditions of Risk." The Journal of Finance, 19(3), 425–442.
+[8] jetbundle. (2026). the black book of quantitative finance. https://www.youtube.com/watch?v=AKIkhuR7HYY
+[9] jetbundle. (2026). 6 laws behind modern quantitative finance. https://www.youtube.com/watch?v=cvL_uWtMTAo
+
+

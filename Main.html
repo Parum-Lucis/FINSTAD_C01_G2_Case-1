@@ -365,33 +365,56 @@ Cleaning</a></li>
 <li><a href="#data-integration" id="toc-data-integration"><span class="toc-section-number">4</span> Data Integration</a></li>
 <li><a href="#descriptive-statistics-visualization" id="toc-descriptive-statistics-visualization"><span class="toc-section-number">5</span> Descriptive Statistics &amp;
 Visualization</a></li>
+<li><a href="#financial-investigation" id="toc-financial-investigation"><span class="toc-section-number">6</span> Financial Investigation</a></li>
+<li><a href="#price-movement" id="toc-price-movement"><span class="toc-section-number">7</span> Price Movement</a>
+<ul>
+<li><a href="#structure" id="toc-structure"><span class="toc-section-number">7.1</span> Structure</a></li>
+<li><a href="#dynamics" id="toc-dynamics"><span class="toc-section-number">7.2</span> Dynamics</a></li>
+<li><a href="#inference" id="toc-inference"><span class="toc-section-number">7.3</span> Inference</a></li>
+<li><a href="#synthesis" id="toc-synthesis"><span class="toc-section-number">7.4</span> Synthesis</a></li>
+</ul></li>
+<li><a href="#risk-and-correlation" id="toc-risk-and-correlation"><span class="toc-section-number">8</span> Risk and Correlation</a>
+<ul>
+<li><a href="#structure-1" id="toc-structure-1"><span class="toc-section-number">8.1</span> Structure</a></li>
+<li><a href="#dynamics-1" id="toc-dynamics-1"><span class="toc-section-number">8.2</span> Dynamics</a></li>
+<li><a href="#inference-1" id="toc-inference-1"><span class="toc-section-number">8.3</span> Inference</a></li>
+<li><a href="#synthesis-1" id="toc-synthesis-1"><span class="toc-section-number">8.4</span> Synthesis</a></li>
+</ul></li>
+<li><a href="#macro-baseline" id="toc-macro-baseline"><span class="toc-section-number">9</span> Macro Baseline</a>
+<ul>
+<li><a href="#structure-2" id="toc-structure-2"><span class="toc-section-number">9.1</span> Structure</a></li>
+<li><a href="#dynamics-2" id="toc-dynamics-2"><span class="toc-section-number">9.2</span> Dynamics</a></li>
+<li><a href="#inference-2" id="toc-inference-2"><span class="toc-section-number">9.3</span> Inference</a></li>
+<li><a href="#synthesis-2" id="toc-synthesis-2"><span class="toc-section-number">9.4</span> Synthesis</a></li>
+</ul></li>
+<li><a href="#conclusion" id="toc-conclusion"><span class="toc-section-number">10</span> Conclusion</a></li>
+<li><a href="#references" id="toc-references"><span class="toc-section-number">11</span> References:</a></li>
 </ul>
 </div>
 
 <p>To run, use the <code>knit</code> button shown above in the ribbon.
 The purpose of this <code>Main.rmd</code> is to atomize the sections to
-parts. This will create</p>
-<p>You can run the child <code>.rmd</code> files in order in the same r
-session to get the output. Remember, for long outputs, you can hide them
-in RStudio.</p>
+parts. This will create You can run the child <code>.rmd</code> files in
+order in the same r session to get the output. Remember, for long
+outputs, you can hide them in RStudio.</p>
 <div id="package-installation" class="section level1" number="1">
 <h1><span class="header-section-number">1</span> Package
 Installation</h1>
-<p>Install the following packages:</p>
-<pre class="r"><code>required_packages &lt;- c(&quot;tidyr&quot;, &quot;dplyr&quot;, &quot;tibble&quot;, &quot;purrr&quot;, &quot;moments&quot;, &quot;quantmod&quot;)
+<pre class="r"><code>required_packages &lt;- c(
+  &quot;tidyr&quot;, &quot;dplyr&quot;, &quot;tibble&quot;, &quot;purrr&quot;, &quot;moments&quot;, &quot;quantmod&quot;, &quot;reticulate&quot;, &quot;httr&quot;, &quot;jsonlite&quot;, &quot;xts&quot;, &quot;readr&quot;, &quot;stringr&quot;, &quot;ggplot2&quot;, &quot;plotly&quot;, &quot;e1071&quot;
+)
 
-for (pkg in required_packages) {
-  
-  if (!require(pkg, character.only = TRUE)) {
-    
-    install.packages(pkg)
+missing_packages &lt;- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]</code></pre>
+<pre><code>## Registered S3 method overwritten by &#39;quantmod&#39;:
+##   method            from
+##   as.zoo.data.frame zoo</code></pre>
+<pre class="r"><code>if (length(missing_packages) &gt; 0) {
+  cat(&quot;Installing missing dependencies:&quot;, paste(missing_packages, collapse = &quot;, &quot;), &quot;\n&quot;)
+  install.packages(missing_packages)
+}
 
-    library(pkg, character.only = TRUE)
-  }
-}</code></pre>
-<pre><code>## Loading required package: tidyr</code></pre>
+invisible(lapply(required_packages, library, character.only = TRUE))</code></pre>
 <pre><code>## Warning: package &#39;tidyr&#39; was built under R version 4.6.1</code></pre>
-<pre><code>## Loading required package: dplyr</code></pre>
 <pre><code>## Warning: package &#39;dplyr&#39; was built under R version 4.6.1</code></pre>
 <pre><code>## 
 ## Attaching package: &#39;dplyr&#39;</code></pre>
@@ -401,12 +424,8 @@ for (pkg in required_packages) {
 <pre><code>## The following objects are masked from &#39;package:base&#39;:
 ## 
 ##     intersect, setdiff, setequal, union</code></pre>
-<pre><code>## Loading required package: tibble</code></pre>
 <pre><code>## Warning: package &#39;tibble&#39; was built under R version 4.6.1</code></pre>
-<pre><code>## Loading required package: purrr</code></pre>
 <pre><code>## Warning: package &#39;purrr&#39; was built under R version 4.6.1</code></pre>
-<pre><code>## Loading required package: moments</code></pre>
-<pre><code>## Loading required package: quantmod</code></pre>
 <pre><code>## Warning: package &#39;quantmod&#39; was built under R version 4.6.1</code></pre>
 <pre><code>## Loading required package: xts</code></pre>
 <pre><code>## Warning: package &#39;xts&#39; was built under R version 4.6.1</code></pre>
@@ -439,9 +458,41 @@ for (pkg in required_packages) {
 ##     first, last</code></pre>
 <pre><code>## Loading required package: TTR</code></pre>
 <pre><code>## Warning: package &#39;TTR&#39; was built under R version 4.6.1</code></pre>
-<pre><code>## Registered S3 method overwritten by &#39;quantmod&#39;:
-##   method            from
-##   as.zoo.data.frame zoo</code></pre>
+<pre><code>## Warning: package &#39;reticulate&#39; was built under R version 4.6.1</code></pre>
+<pre><code>## Warning: package &#39;httr&#39; was built under R version 4.6.1</code></pre>
+<pre><code>## Warning: package &#39;jsonlite&#39; was built under R version 4.6.1</code></pre>
+<pre><code>## 
+## Attaching package: &#39;jsonlite&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:purrr&#39;:
+## 
+##     flatten</code></pre>
+<pre><code>## Warning: package &#39;readr&#39; was built under R version 4.6.1</code></pre>
+<pre><code>## Warning: package &#39;stringr&#39; was built under R version 4.6.1</code></pre>
+<pre><code>## Warning: package &#39;ggplot2&#39; was built under R version 4.6.1</code></pre>
+<pre><code>## Warning: package &#39;plotly&#39; was built under R version 4.6.1</code></pre>
+<pre><code>## 
+## Attaching package: &#39;plotly&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:ggplot2&#39;:
+## 
+##     last_plot</code></pre>
+<pre><code>## The following object is masked from &#39;package:httr&#39;:
+## 
+##     config</code></pre>
+<pre><code>## The following object is masked from &#39;package:stats&#39;:
+## 
+##     filter</code></pre>
+<pre><code>## The following object is masked from &#39;package:graphics&#39;:
+## 
+##     layout</code></pre>
+<pre><code>## Warning: package &#39;e1071&#39; was built under R version 4.6.1</code></pre>
+<pre><code>## 
+## Attaching package: &#39;e1071&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:ggplot2&#39;:
+## 
+##     element</code></pre>
+<pre><code>## The following objects are masked from &#39;package:moments&#39;:
+## 
+##     kurtosis, moment, skewness</code></pre>
 </div>
 <div id="global-variables" class="section level1" number="2">
 <h1><span class="header-section-number">2</span> Global Variables</h1>
@@ -452,37 +503,68 @@ end_date &lt;- as.Date(&quot;2025-12-31&quot;)</code></pre>
 <div id="data-acquisition-cleaning" class="section level1" number="3">
 <h1><span class="header-section-number">3</span> Data Acquisition &amp;
 Cleaning</h1>
+<pre class="r"><code>pal_raw &lt;- read_csv(&quot;pal_stock.csv&quot;, show_col_types = FALSE) 
+
+pal_df &lt;- pal_raw %&gt;%
+  mutate(Date = as.Date(Date, format = &quot;%m/%d/%Y&quot;)) %&gt;%
+  
+  filter(!is.na(Date)) %&gt;%
+  
+  arrange(Date) %&gt;%
+  
+  mutate(
+    `Vol.` = case_when(
+      str_detect(`Vol.`, &quot;K&quot;) ~ as.numeric(str_remove(`Vol.`, &quot;K&quot;)) * 1000,
+      str_detect(`Vol.`, &quot;M&quot;) ~ as.numeric(str_remove(`Vol.`, &quot;M&quot;)) * 1000000,
+      `Vol.` == &quot;-&quot; ~ 0,
+      TRUE ~ as.numeric(`Vol.`)
+    )
+  ) %&gt;%
+  select(Date, Open, High, Low, Price, `Vol.`) %&gt;% 
+  rename(Close = Price, Volume = `Vol.`) %&gt;%
+  
+  mutate(AdjClose = Close) </code></pre>
+<pre><code>## Warning: There were 3 warnings in `mutate()`.
+## The first warning was:
+## ℹ In argument: `Vol. = case_when(...)`.
+## Caused by warning:
+## ! NAs introduced by coercion
+## ℹ Run `dplyr::last_dplyr_warnings()` to see the 2 remaining warnings.</code></pre>
+<pre class="r"><code>pal_xts &lt;- xts(pal_df[, -1], order.by = pal_df$Date)
+
+colnames(pal_xts) &lt;- c(&quot;PAL.Open&quot;, &quot;PAL.High&quot;, &quot;PAL.Low&quot;, &quot;PAL.Close&quot;, &quot;PAL.Volume&quot;, &quot;PAL.Adjusted&quot;)
+
+PAL &lt;- pal_xts[&quot;2019-12/2025-12&quot;]</code></pre>
 <pre class="r"><code>yahoo_tickers &lt;- c(
-  US_Equity = &quot;AAPL&quot;,     # Placeholder US equity
-  PH_Equity = &quot;PSEI.PS&quot;,  # Placeholder PH equity
-  Bitcoin = &quot;BTC-USD&quot;,    # Bitcoin in USD
-  SPY = &quot;SPY&quot;,            # SPDR S&amp;P 500 ETF Trust
-  VIX = &quot;^VIX&quot;            # CBOE Volatility Index
+  US_Equity = &quot;UAL&quot;,     # US Equity: United Airlines
+  Bitcoin = &quot;BTC-USD&quot;,   # Bitcoin in USD
+  SPY = &quot;SPY&quot;,           # SPDR S&amp;P 500 ETF Trust
+  VIX = &quot;^VIX&quot;           # CBOE Volatility Index
 )
 
 getSymbols(yahoo_tickers, src = &quot;yahoo&quot;, from = start_date, to = end_date)</code></pre>
-<pre><code>## Warning: PSEI.PS contains missing values. Some functions will not work if
-## objects contain missing values in the middle of the series. Consider using
-## na.omit(), na.approx(), na.fill(), etc to remove or replace them.</code></pre>
 <pre><code>## Warning: ^VIX contains missing values. Some functions will not work if objects
 ## contain missing values in the middle of the series. Consider using na.omit(),
 ## na.approx(), na.fill(), etc to remove or replace them.</code></pre>
-<pre><code>## [1] &quot;AAPL&quot;    &quot;PSEI.PS&quot; &quot;BTC-USD&quot; &quot;SPY&quot;     &quot;VIX&quot;</code></pre>
+<pre><code>## [1] &quot;UAL&quot;     &quot;BTC-USD&quot; &quot;SPY&quot;     &quot;VIX&quot;</code></pre>
 <pre class="r"><code>fred_tickers &lt;- c(
   &quot;DGS10&quot;,
   &quot;FEDFUNDS&quot;,
-  &quot;CPIAUCSL&quot;
+  &quot;CPIAUCSL&quot;,
+  &quot;DGS2&quot;
 )
 
 getSymbols(fred_tickers, src = &quot;FRED&quot;)</code></pre>
 <pre><code>## getSymbols.FRED: requests without an API key are not guaranteed to succeed.
 ## Register for a free key at https://fredaccount.stlouisfed.org/apikeys and set it with
 ## setDefaults(getSymbols.FRED, api.key = &quot;your key&quot;).</code></pre>
-<pre><code>## [1] &quot;DGS10&quot;    &quot;FEDFUNDS&quot; &quot;CPIAUCSL&quot;</code></pre>
+<pre><code>## [1] &quot;DGS10&quot;    &quot;FEDFUNDS&quot; &quot;CPIAUCSL&quot; &quot;DGS2&quot;</code></pre>
 <pre class="r"><code>DGS10 &lt;- window(DGS10, start = start_date, end = end_date)
 FEDFUNDS &lt;- window(FEDFUNDS, start = start_date, end = end_date)
-CPIAUCSL &lt;- window(CPIAUCSL, start = start_date, end = end_date)</code></pre>
-<pre class="r"><code>instruments &lt;- c(&quot;AAPL&quot;, &quot;PSEI.PS&quot;, &quot;BTC-USD&quot;, &quot;SPY&quot;, &quot;VIX&quot;, &quot;DGS10&quot;, &quot;FEDFUNDS&quot;, &quot;CPIAUCSL&quot;)
+CPIAUCSL &lt;- window(CPIAUCSL, start = start_date, end = end_date)
+DGS2 &lt;- window(DGS2, start = start_date, end = end_date)</code></pre>
+<pre class="r"><code>instruments &lt;- c(&quot;UAL&quot;, &quot;PAL&quot;, &quot;BTC-USD&quot;, &quot;SPY&quot;, &quot;VIX&quot;, &quot;DGS10&quot;, &quot;FEDFUNDS&quot;, &quot;CPIAUCSL&quot;, &quot;DGS2&quot;)
+
 init_obs &lt;- function(ticker_list, sample_size = 3){
    for (sym in ticker_list) {
     data_obj &lt;- get(sym)
@@ -522,64 +604,29 @@ init_obs &lt;- function(ticker_list, sample_size = 3){
   } 
 }
 init_obs(instruments)</code></pre>
-<pre><code>## INSTRUMENT: AAPL 
-##            AAPL.Open AAPL.High AAPL.Low AAPL.Close AAPL.Volume AAPL.Adjusted
-## 2019-12-02   66.8175   67.0625  65.8625    66.0400    94487200      63.61818
-## 2019-12-03   64.5775   64.8825  64.0725    64.8625   114430400      62.48385
-## 2019-12-04   65.2675   65.8275  65.1700    65.4350    67181600      63.03534
-## 2019-12-05   65.9475   66.4725  65.6825    66.3950    74424400      63.96016
-## 2019-12-06   66.8700   67.7500  66.8250    67.6775   106075600      65.19560
-## 2019-12-09   67.5000   67.7000  66.2275    66.7300   128042400      64.28286
+<pre><code>## INSTRUMENT: UAL 
+##            UAL.Open UAL.High UAL.Low UAL.Close UAL.Volume UAL.Adjusted
+## 2019-12-02    93.00    93.62   91.44     91.63    1941600        91.63
+## 2019-12-03    90.60    90.78   88.50     88.87    3352800        88.87
+## 2019-12-04    89.16    89.81   88.13     88.17    2072400        88.17
+## 2019-12-05    89.10    89.33   87.60     87.86    1959700        87.86
+## 2019-12-06    88.79    89.50   88.55     88.58    1485300        88.58
+## 2019-12-09    88.49    88.58   87.30     87.61    2160900        87.61
 ## 
 ## Total NAs: 0 
 ## 
 ## Total Duplicates: 0 
 ## 
-## INSTRUMENT: PSEI.PS 
-##            PSEI.PS.Open PSEI.PS.High PSEI.PS.Low PSEI.PS.Close PSEI.PS.Volume
-## 2019-12-02      7769.26      7877.19     7753.76       7877.19         112900
-## 2019-12-03      7858.96      7888.46     7829.35       7855.18         123600
-## 2019-12-04      7848.53      7848.53     7772.05       7815.93         250600
-## 2019-12-05      7789.74      7817.97     7777.07       7790.91         171400
-## 2019-12-06      7796.44      7811.19     7760.75       7801.72         152400
-## 2019-12-09      7825.13      7838.49     7779.80       7779.80         171600
-##            PSEI.PS.Adjusted
-## 2019-12-02         7875.165
-## 2019-12-03         7853.161
-## 2019-12-04         7813.921
-## 2019-12-05         7788.907
-## 2019-12-06         7799.714
-## 2019-12-09         7777.800
+## INSTRUMENT: PAL 
+##            PAL.Open PAL.High PAL.Low PAL.Close PAL.Volume PAL.Adjusted
+## 2019-12-02     7.65     7.80    7.50      7.80      22800         7.80
+## 2019-12-03     7.79     7.79    7.79      7.79       4200         7.79
+## 2019-12-04     7.50     7.79    7.50      7.78       2900         7.78
+## 2019-12-05     7.78     7.78    7.50      7.74       9900         7.74
+## 2019-12-06     7.74     7.74    7.50      7.63       6400         7.63
+## 2019-12-09     7.62     7.62    7.60      7.62       5500         7.62
 ## 
-## Total NAs: 102 
-## 
-##            PSEI.PS.Open PSEI.PS.High PSEI.PS.Low PSEI.PS.Close PSEI.PS.Volume
-## 2019-12-23      7745.96       7872.6     7745.26        7872.6         124400
-## 2019-12-24           NA           NA          NA            NA             NA
-## 2019-12-25           NA           NA          NA            NA             NA
-##            PSEI.PS.Adjusted
-## 2019-12-23         7870.576
-## 2019-12-24               NA
-## 2019-12-25               NA
-## ------
-##            PSEI.PS.Open PSEI.PS.High PSEI.PS.Low PSEI.PS.Close PSEI.PS.Volume
-## 2019-12-24           NA           NA          NA            NA             NA
-## 2019-12-25           NA           NA          NA            NA             NA
-## 2019-12-26      7794.53      7842.28     7772.97       7842.28          96200
-##            PSEI.PS.Adjusted
-## 2019-12-24               NA
-## 2019-12-25               NA
-## 2019-12-26         7840.264
-## ------
-##            PSEI.PS.Open PSEI.PS.High PSEI.PS.Low PSEI.PS.Close PSEI.PS.Volume
-## 2019-12-27      7848.39      7891.99     7815.26       7815.26         177800
-## 2019-12-30           NA           NA          NA            NA             NA
-## 2019-12-31           NA           NA          NA            NA             NA
-##            PSEI.PS.Adjusted
-## 2019-12-27          7813.25
-## 2019-12-30               NA
-## 2019-12-31               NA
-## ------
+## Total NAs: 0 
 ## 
 ## Total Duplicates: 0 
 ## 
@@ -606,11 +653,11 @@ init_obs(instruments)</code></pre>
 ## INSTRUMENT: SPY 
 ##            SPY.Open SPY.High SPY.Low SPY.Close SPY.Volume SPY.Adjusted
 ## 2019-12-02   314.59   314.66  311.17    311.64   75767800     282.6761
-## 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7803
+## 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7804
 ## 2019-12-04   310.70   312.12  310.32    311.46   49080000     282.5128
-## 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0209
+## 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0208
 ## 2019-12-06   314.12   315.31  314.11    314.87   48927000     285.6059
-## 2019-12-09   314.44   315.18  313.80    313.88   34838500     284.7079
+## 2019-12-09   314.44   315.18  313.80    313.88   34838500     284.7078
 ## 
 ## Total NAs: 0 
 ## 
@@ -704,6 +751,35 @@ init_obs(instruments)</code></pre>
 ## 2025-11-01  325.063
 ## ------
 ## 
+## Total Duplicates: 0 
+## 
+## INSTRUMENT: DGS2 
+##            DGS2
+## 2019-12-02 1.61
+## 2019-12-03 1.53
+## 2019-12-04 1.58
+## 2019-12-05 1.58
+## 2019-12-06 1.61
+## 2019-12-09 1.63
+## 
+## Total NAs: 67 
+## 
+##            DGS2
+## 2019-12-24 1.62
+## 2019-12-25   NA
+## 2019-12-26 1.64
+## ------
+##            DGS2
+## 2019-12-31 1.58
+## 2020-01-01   NA
+## 2020-01-02 1.58
+## ------
+##            DGS2
+## 2020-01-17 1.58
+## 2020-01-20   NA
+## 2020-01-21 1.53
+## ------
+## 
 ## Total Duplicates: 0</code></pre>
 <pre class="r"><code>for (sym in instruments) {
   temp_data &lt;- get(sym)
@@ -711,34 +787,27 @@ init_obs(instruments)</code></pre>
   assign(sym, temp_data)
 }</code></pre>
 <pre class="r"><code>init_obs(instruments)</code></pre>
-<pre><code>## INSTRUMENT: AAPL 
-##            AAPL.Open AAPL.High AAPL.Low AAPL.Close AAPL.Volume AAPL.Adjusted
-## 2019-12-02   66.8175   67.0625  65.8625    66.0400    94487200      63.61818
-## 2019-12-03   64.5775   64.8825  64.0725    64.8625   114430400      62.48385
-## 2019-12-04   65.2675   65.8275  65.1700    65.4350    67181600      63.03534
-## 2019-12-05   65.9475   66.4725  65.6825    66.3950    74424400      63.96016
-## 2019-12-06   66.8700   67.7500  66.8250    67.6775   106075600      65.19560
-## 2019-12-09   67.5000   67.7000  66.2275    66.7300   128042400      64.28286
+<pre><code>## INSTRUMENT: UAL 
+##            UAL.Open UAL.High UAL.Low UAL.Close UAL.Volume UAL.Adjusted
+## 2019-12-02    93.00    93.62   91.44     91.63    1941600        91.63
+## 2019-12-03    90.60    90.78   88.50     88.87    3352800        88.87
+## 2019-12-04    89.16    89.81   88.13     88.17    2072400        88.17
+## 2019-12-05    89.10    89.33   87.60     87.86    1959700        87.86
+## 2019-12-06    88.79    89.50   88.55     88.58    1485300        88.58
+## 2019-12-09    88.49    88.58   87.30     87.61    2160900        87.61
 ## 
 ## Total NAs: 0 
 ## 
 ## Total Duplicates: 0 
 ## 
-## INSTRUMENT: PSEI.PS 
-##            PSEI.PS.Open PSEI.PS.High PSEI.PS.Low PSEI.PS.Close PSEI.PS.Volume
-## 2019-12-02      7769.26      7877.19     7753.76       7877.19         112900
-## 2019-12-03      7858.96      7888.46     7829.35       7855.18         123600
-## 2019-12-04      7848.53      7848.53     7772.05       7815.93         250600
-## 2019-12-05      7789.74      7817.97     7777.07       7790.91         171400
-## 2019-12-06      7796.44      7811.19     7760.75       7801.72         152400
-## 2019-12-09      7825.13      7838.49     7779.80       7779.80         171600
-##            PSEI.PS.Adjusted
-## 2019-12-02         7875.165
-## 2019-12-03         7853.161
-## 2019-12-04         7813.921
-## 2019-12-05         7788.907
-## 2019-12-06         7799.714
-## 2019-12-09         7777.800
+## INSTRUMENT: PAL 
+##            PAL.Open PAL.High PAL.Low PAL.Close PAL.Volume PAL.Adjusted
+## 2019-12-02     7.65     7.80    7.50      7.80      22800         7.80
+## 2019-12-03     7.79     7.79    7.79      7.79       4200         7.79
+## 2019-12-04     7.50     7.79    7.50      7.78       2900         7.78
+## 2019-12-05     7.78     7.78    7.50      7.74       9900         7.74
+## 2019-12-06     7.74     7.74    7.50      7.63       6400         7.63
+## 2019-12-09     7.62     7.62    7.60      7.62       5500         7.62
 ## 
 ## Total NAs: 0 
 ## 
@@ -767,11 +836,11 @@ init_obs(instruments)</code></pre>
 ## INSTRUMENT: SPY 
 ##            SPY.Open SPY.High SPY.Low SPY.Close SPY.Volume SPY.Adjusted
 ## 2019-12-02   314.59   314.66  311.17    311.64   75767800     282.6761
-## 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7803
+## 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7804
 ## 2019-12-04   310.70   312.12  310.32    311.46   49080000     282.5128
-## 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0209
+## 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0208
 ## 2019-12-06   314.12   315.31  314.11    314.87   48927000     285.6059
-## 2019-12-09   314.44   315.18  313.80    313.88   34838500     284.7079
+## 2019-12-09   314.44   315.18  313.80    313.88   34838500     284.7078
 ## 
 ## Total NAs: 0 
 ## 
@@ -827,36 +896,262 @@ init_obs(instruments)</code></pre>
 ## 
 ## Total NAs: 0 
 ## 
+## Total Duplicates: 0 
+## 
+## INSTRUMENT: DGS2 
+##            DGS2
+## 2019-12-02 1.61
+## 2019-12-03 1.53
+## 2019-12-04 1.58
+## 2019-12-05 1.58
+## 2019-12-06 1.61
+## 2019-12-09 1.63
+## 
+## Total NAs: 0 
+## 
 ## Total Duplicates: 0</code></pre>
 </div>
 <div id="data-integration" class="section level1" number="4">
 <h1><span class="header-section-number">4</span> Data Integration</h1>
+<p>Get a list of tibble objects from the raw financial instruments
+data.</p>
+<p>That is: <code>UAL.Adjusted</code>, <code>PAL.Adjusted</code>,
+<code>BTC-USD.Adjusted</code>, <code>SPY.Adjusted</code>,
+<code>VIX.Adjusted</code>, <code>DGS10</code>, <code>FEDFUNDS</code>,
+<code>CPIAUCSL</code>, <code>DGS2</code></p>
 <pre class="r"><code>df_list &lt;- map(instruments, function(sym) {
-  
   data_obj &lt;- get(sym)
   
-  clean_df &lt;- as.data.frame(data_obj) %&gt;% 
+  # If it has an Adjusted column, extract it. Otherwise, use the raw data object.
+  if (has.Ad(data_obj)) {
+    extracted_data &lt;- Ad(data_obj)
+  } else {
+    extracted_data &lt;- data_obj
+  }
+  
+  clean_df &lt;- as.data.frame(extracted_data) %&gt;% 
     rownames_to_column(var = &quot;Date&quot;) %&gt;% 
-    mutate(Date = as.Date(Date))
+    mutate(Date = as.Date(Date)) %&gt;%
+    as_tibble()
   
   return(clean_df)
 })
 
-master_df &lt;- df_list %&gt;% 
-  reduce(full_join, by = &quot;Date&quot;) %&gt;% 
-  arrange(Date)</code></pre>
+df_list</code></pre>
+<pre><code>## [[1]]
+## # A tibble: 1,528 × 2
+##    Date       UAL.Adjusted
+##    &lt;date&gt;            &lt;dbl&gt;
+##  1 2019-12-02         91.6
+##  2 2019-12-03         88.9
+##  3 2019-12-04         88.2
+##  4 2019-12-05         87.9
+##  5 2019-12-06         88.6
+##  6 2019-12-09         87.6
+##  7 2019-12-10         86.5
+##  8 2019-12-11         87.0
+##  9 2019-12-12         88.5
+## 10 2019-12-13         87.6
+## # ℹ 1,518 more rows
+## 
+## [[2]]
+## # A tibble: 1,258 × 2
+##    Date       PAL.Adjusted
+##    &lt;date&gt;            &lt;dbl&gt;
+##  1 2019-12-02         7.8 
+##  2 2019-12-03         7.79
+##  3 2019-12-04         7.78
+##  4 2019-12-05         7.74
+##  5 2019-12-06         7.63
+##  6 2019-12-09         7.62
+##  7 2019-12-10         7.62
+##  8 2019-12-11         7.5 
+##  9 2019-12-12         7.3 
+## 10 2019-12-13         8   
+## # ℹ 1,248 more rows
+## 
+## [[3]]
+## # A tibble: 2,223 × 2
+##    Date       `BTC-USD.Adjusted`
+##    &lt;date&gt;                  &lt;dbl&gt;
+##  1 2019-12-01              7424.
+##  2 2019-12-02              7322.
+##  3 2019-12-03              7320.
+##  4 2019-12-04              7252.
+##  5 2019-12-05              7448.
+##  6 2019-12-06              7547.
+##  7 2019-12-07              7556.
+##  8 2019-12-08              7564.
+##  9 2019-12-09              7401.
+## 10 2019-12-10              7278.
+## # ℹ 2,213 more rows
+## 
+## [[4]]
+## # A tibble: 1,528 × 2
+##    Date       SPY.Adjusted
+##    &lt;date&gt;            &lt;dbl&gt;
+##  1 2019-12-02         283.
+##  2 2019-12-03         281.
+##  3 2019-12-04         283.
+##  4 2019-12-05         283.
+##  5 2019-12-06         286.
+##  6 2019-12-09         285.
+##  7 2019-12-10         284.
+##  8 2019-12-11         285.
+##  9 2019-12-12         288.
+## 10 2019-12-13         288.
+## # ℹ 1,518 more rows
+## 
+## [[5]]
+## # A tibble: 1,587 × 2
+##    Date       VIX.Adjusted
+##    &lt;date&gt;            &lt;dbl&gt;
+##  1 2019-12-02         14.9
+##  2 2019-12-03         16.0
+##  3 2019-12-04         14.8
+##  4 2019-12-05         14.5
+##  5 2019-12-06         13.6
+##  6 2019-12-09         15.9
+##  7 2019-12-10         15.7
+##  8 2019-12-11         15.0
+##  9 2019-12-12         13.9
+## 10 2019-12-13         12.6
+## # ℹ 1,577 more rows
+## 
+## [[6]]
+## # A tibble: 1,588 × 2
+##    Date       DGS10
+##    &lt;date&gt;     &lt;dbl&gt;
+##  1 2019-12-02  1.83
+##  2 2019-12-03  1.72
+##  3 2019-12-04  1.77
+##  4 2019-12-05  1.8 
+##  5 2019-12-06  1.84
+##  6 2019-12-09  1.83
+##  7 2019-12-10  1.85
+##  8 2019-12-11  1.79
+##  9 2019-12-12  1.9 
+## 10 2019-12-13  1.82
+## # ℹ 1,578 more rows
+## 
+## [[7]]
+## # A tibble: 73 × 2
+##    Date       FEDFUNDS
+##    &lt;date&gt;        &lt;dbl&gt;
+##  1 2019-12-01     1.55
+##  2 2020-01-01     1.55
+##  3 2020-02-01     1.58
+##  4 2020-03-01     0.65
+##  5 2020-04-01     0.05
+##  6 2020-05-01     0.05
+##  7 2020-06-01     0.08
+##  8 2020-07-01     0.09
+##  9 2020-08-01     0.1 
+## 10 2020-09-01     0.09
+## # ℹ 63 more rows
+## 
+## [[8]]
+## # A tibble: 73 × 2
+##    Date       CPIAUCSL
+##    &lt;date&gt;        &lt;dbl&gt;
+##  1 2019-12-01     259.
+##  2 2020-01-01     259.
+##  3 2020-02-01     259.
+##  4 2020-03-01     258.
+##  5 2020-04-01     256.
+##  6 2020-05-01     256.
+##  7 2020-06-01     257.
+##  8 2020-07-01     258.
+##  9 2020-08-01     259.
+## 10 2020-09-01     260.
+## # ℹ 63 more rows
+## 
+## [[9]]
+## # A tibble: 1,588 × 2
+##    Date        DGS2
+##    &lt;date&gt;     &lt;dbl&gt;
+##  1 2019-12-02  1.61
+##  2 2019-12-03  1.53
+##  3 2019-12-04  1.58
+##  4 2019-12-05  1.58
+##  5 2019-12-06  1.61
+##  6 2019-12-09  1.63
+##  7 2019-12-10  1.65
+##  8 2019-12-11  1.61
+##  9 2019-12-12  1.66
+## 10 2019-12-13  1.61
+## # ℹ 1,578 more rows</code></pre>
+<p>Create a compact Master Data frame tibble full join on date.</p>
+<pre class="r"><code>master_df &lt;- df_list %&gt;% 
+  compact() %&gt;%                       # Remove full NA rows
+  reduce(full_join, by = &quot;Date&quot;) %&gt;%  # Full Join
+  arrange(Date) %&gt;%                   # Arrange by date
+  fill(-Date, .direction = &quot;down&quot;)    # Forward fill
+
+master_df</code></pre>
+<pre><code>## # A tibble: 2,223 × 10
+##    Date       UAL.Adjusted PAL.Adjusted `BTC-USD.Adjusted` SPY.Adjusted
+##    &lt;date&gt;            &lt;dbl&gt;        &lt;dbl&gt;              &lt;dbl&gt;        &lt;dbl&gt;
+##  1 2019-12-01         NA          NA                 7424.          NA 
+##  2 2019-12-02         91.6         7.8               7322.         283.
+##  3 2019-12-03         88.9         7.79              7320.         281.
+##  4 2019-12-04         88.2         7.78              7252.         283.
+##  5 2019-12-05         87.9         7.74              7448.         283.
+##  6 2019-12-06         88.6         7.63              7547.         286.
+##  7 2019-12-07         88.6         7.63              7556.         286.
+##  8 2019-12-08         88.6         7.63              7564.         286.
+##  9 2019-12-09         87.6         7.62              7401.         285.
+## 10 2019-12-10         86.5         7.62              7278.         284.
+## # ℹ 2,213 more rows
+## # ℹ 5 more variables: VIX.Adjusted &lt;dbl&gt;, DGS10 &lt;dbl&gt;, FEDFUNDS &lt;dbl&gt;,
+## #   CPIAUCSL &lt;dbl&gt;, DGS2 &lt;dbl&gt;</code></pre>
+<p>Get the log returns of each asset</p>
+<pre class="r"><code># Get Log Adjusted (Difference of Logs) from tickers with adjusted price. 
+adjusted_cols &lt;- names(master_df)[str_detect(names(master_df), &quot;\\.Adjusted$&quot;)]
+master_df &lt;- master_df %&gt;%
+  # Mutate only calculate log returns on columns that end in &quot;.Adjusted&quot;
+  # This automatically ignores DGS10, DGS2, FEDFUNDS, and CPIAUCSL
+  mutate(
+    across(
+      all_of(adjusted_cols),
+      ~ c(NA, diff(log(.x))),
+      .names = &quot;{str_remove(.col, &#39;\\\\.Adjusted&#39;)}.LogAdj&quot;
+    )
+  ) %&gt;%
+  select(-all_of(setdiff(adjusted_cols, &quot;VIX.Adjusted&quot;)))
+
+master_df</code></pre>
+<pre><code>## # A tibble: 2,223 × 11
+##    Date       VIX.Adjusted DGS10 FEDFUNDS CPIAUCSL  DGS2 UAL.LogAdj PAL.LogAdj
+##    &lt;date&gt;            &lt;dbl&gt; &lt;dbl&gt;    &lt;dbl&gt;    &lt;dbl&gt; &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;
+##  1 2019-12-01         NA   NA        1.55     259. NA      NA         NA      
+##  2 2019-12-02         14.9  1.83     1.55     259.  1.61   NA         NA      
+##  3 2019-12-03         16.0  1.72     1.55     259.  1.53   -0.0306    -0.00128
+##  4 2019-12-04         14.8  1.77     1.55     259.  1.58   -0.00791   -0.00128
+##  5 2019-12-05         14.5  1.8      1.55     259.  1.58   -0.00352   -0.00515
+##  6 2019-12-06         13.6  1.84     1.55     259.  1.61    0.00816   -0.0143 
+##  7 2019-12-07         13.6  1.84     1.55     259.  1.61    0          0      
+##  8 2019-12-08         13.6  1.84     1.55     259.  1.61    0          0      
+##  9 2019-12-09         15.9  1.83     1.55     259.  1.63   -0.0110    -0.00131
+## 10 2019-12-10         15.7  1.85     1.55     259.  1.65   -0.0126     0      
+## # ℹ 2,213 more rows
+## # ℹ 3 more variables: `BTC-USD.LogAdj` &lt;dbl&gt;, SPY.LogAdj &lt;dbl&gt;,
+## #   VIX.LogAdj &lt;dbl&gt;</code></pre>
+<p>Exploring Missing rows</p>
 <pre class="r"><code>explore_instruments &lt;- function(instruments, master_df) {
   for (sym in instruments) {
-    cat(&quot;\n############################\nINSTRUMENT:&quot;, sym, &quot;\n###########################\n\n&quot;)
+    cat(&quot;INSTRUMENT:&quot;, sym, &quot;\n&quot;)
     
     instrument_df &lt;- master_df %&gt;% 
       select(Date, starts_with(sym))
     
-    print(head(instrument_df))
+    print(instrument_df, n = 6)
     cat(&quot;\n&quot;)
     
     cat(&quot;--- Missing Values per Column ---\n&quot;)
-    print(colSums(is.na(instrument_df)))
+    instrument_df %&gt;% 
+      summarise(across(everything(), ~sum(is.na(.)))) %&gt;% 
+      print(width = Inf)
     cat(&quot;\n&quot;)
     
     missing_rows &lt;- instrument_df %&gt;%
@@ -867,534 +1162,428 @@ master_df &lt;- df_list %&gt;%
     
     if (total_missing &gt; 0) {
       cat(&quot;--- Top 10 Missing Rows ---\n&quot;)
-      print(head(missing_rows, 10))
+      print(missing_rows, n = 10)
     }
     
     dup_count &lt;- sum(duplicated(instrument_df$Date))
   }
   
-  cat(&quot;\n###########################\nMASTER DF:\n###########################\n&quot;)
   dplyr::glimpse(master_df)
 }
+
 explore_instruments(instruments, master_df)</code></pre>
-<pre><code>## 
-## ############################
-## INSTRUMENT: AAPL 
-## ###########################
-## 
-##         Date AAPL.Open AAPL.High AAPL.Low AAPL.Close AAPL.Volume AAPL.Adjusted
-## 1 2019-12-01        NA        NA       NA         NA          NA            NA
-## 2 2019-12-02   66.8175   67.0625  65.8625    66.0400    94487200      63.61818
-## 3 2019-12-03   64.5775   64.8825  64.0725    64.8625   114430400      62.48385
-## 4 2019-12-04   65.2675   65.8275  65.1700    65.4350    67181600      63.03534
-## 5 2019-12-05   65.9475   66.4725  65.6825    66.3950    74424400      63.96016
-## 6 2019-12-06   66.8700   67.7500  66.8250    67.6775   106075600      65.19560
-## 
-## --- Missing Values per Column ---
-##          Date     AAPL.Open     AAPL.High      AAPL.Low    AAPL.Close 
-##             0           695           695           695           695 
-##   AAPL.Volume AAPL.Adjusted 
-##           695           695 
-## 
-## Total Rows with NAs: 695 
-## --- Top 10 Missing Rows ---
-##          Date AAPL.Open AAPL.High AAPL.Low AAPL.Close AAPL.Volume AAPL.Adjusted
-## 1  2019-12-01        NA        NA       NA         NA          NA            NA
-## 2  2019-12-07        NA        NA       NA         NA          NA            NA
-## 3  2019-12-08        NA        NA       NA         NA          NA            NA
-## 4  2019-12-14        NA        NA       NA         NA          NA            NA
-## 5  2019-12-15        NA        NA       NA         NA          NA            NA
-## 6  2019-12-21        NA        NA       NA         NA          NA            NA
-## 7  2019-12-22        NA        NA       NA         NA          NA            NA
-## 8  2019-12-25        NA        NA       NA         NA          NA            NA
-## 9  2019-12-28        NA        NA       NA         NA          NA            NA
-## 10 2019-12-29        NA        NA       NA         NA          NA            NA
-## 
-## ############################
-## INSTRUMENT: PSEI.PS 
-## ###########################
-## 
-##         Date PSEI.PS.Open PSEI.PS.High PSEI.PS.Low PSEI.PS.Close PSEI.PS.Volume
-## 1 2019-12-01           NA           NA          NA            NA             NA
-## 2 2019-12-02      7769.26      7877.19     7753.76       7877.19         112900
-## 3 2019-12-03      7858.96      7888.46     7829.35       7855.18         123600
-## 4 2019-12-04      7848.53      7848.53     7772.05       7815.93         250600
-## 5 2019-12-05      7789.74      7817.97     7777.07       7790.91         171400
-## 6 2019-12-06      7796.44      7811.19     7760.75       7801.72         152400
-##   PSEI.PS.Adjusted
-## 1               NA
-## 2         7875.165
-## 3         7853.161
-## 4         7813.921
-## 5         7788.907
-## 6         7799.714
+<pre><code>## INSTRUMENT: UAL 
+## # A tibble: 2,223 × 2
+##   Date       UAL.LogAdj
+##   &lt;date&gt;          &lt;dbl&gt;
+## 1 2019-12-01   NA      
+## 2 2019-12-02   NA      
+## 3 2019-12-03   -0.0306 
+## 4 2019-12-04   -0.00791
+## 5 2019-12-05   -0.00352
+## 6 2019-12-06    0.00816
+## # ℹ 2,217 more rows
 ## 
 ## --- Missing Values per Column ---
-##             Date     PSEI.PS.Open     PSEI.PS.High      PSEI.PS.Low 
-##                0              636              636              636 
-##    PSEI.PS.Close   PSEI.PS.Volume PSEI.PS.Adjusted 
-##              636              636              636 
+## # A tibble: 1 × 2
+##    Date UAL.LogAdj
+##   &lt;int&gt;      &lt;int&gt;
+## 1     0          2
 ## 
-## Total Rows with NAs: 636 
+## Total Rows with NAs: 2 
 ## --- Top 10 Missing Rows ---
-##          Date PSEI.PS.Open PSEI.PS.High PSEI.PS.Low PSEI.PS.Close
-## 1  2019-12-01           NA           NA          NA            NA
-## 2  2019-12-07           NA           NA          NA            NA
-## 3  2019-12-08           NA           NA          NA            NA
-## 4  2019-12-14           NA           NA          NA            NA
-## 5  2019-12-15           NA           NA          NA            NA
-## 6  2019-12-21           NA           NA          NA            NA
-## 7  2019-12-22           NA           NA          NA            NA
-## 8  2019-12-28           NA           NA          NA            NA
-## 9  2019-12-29           NA           NA          NA            NA
-## 10 2020-01-04           NA           NA          NA            NA
-##    PSEI.PS.Volume PSEI.PS.Adjusted
-## 1              NA               NA
-## 2              NA               NA
-## 3              NA               NA
-## 4              NA               NA
-## 5              NA               NA
-## 6              NA               NA
-## 7              NA               NA
-## 8              NA               NA
-## 9              NA               NA
-## 10             NA               NA
+## # A tibble: 2 × 2
+##   Date       UAL.LogAdj
+##   &lt;date&gt;          &lt;dbl&gt;
+## 1 2019-12-01         NA
+## 2 2019-12-02         NA
+## INSTRUMENT: PAL 
+## # A tibble: 2,223 × 2
+##   Date       PAL.LogAdj
+##   &lt;date&gt;          &lt;dbl&gt;
+## 1 2019-12-01   NA      
+## 2 2019-12-02   NA      
+## 3 2019-12-03   -0.00128
+## 4 2019-12-04   -0.00128
+## 5 2019-12-05   -0.00515
+## 6 2019-12-06   -0.0143 
+## # ℹ 2,217 more rows
 ## 
-## ############################
+## --- Missing Values per Column ---
+## # A tibble: 1 × 2
+##    Date PAL.LogAdj
+##   &lt;int&gt;      &lt;int&gt;
+## 1     0          2
+## 
+## Total Rows with NAs: 2 
+## --- Top 10 Missing Rows ---
+## # A tibble: 2 × 2
+##   Date       PAL.LogAdj
+##   &lt;date&gt;          &lt;dbl&gt;
+## 1 2019-12-01         NA
+## 2 2019-12-02         NA
 ## INSTRUMENT: BTC-USD 
-## ###########################
-## 
-##         Date BTC-USD.Open BTC-USD.High BTC-USD.Low BTC-USD.Close BTC-USD.Volume
-## 1 2019-12-01     7571.616     7571.616    7291.342      7424.292    18720708479
-## 2 2019-12-02     7424.036     7474.819    7233.399      7321.988    17082040706
-## 3 2019-12-03     7323.976     7418.859    7229.357      7320.146    14797485769
-## 4 2019-12-04     7320.125     7539.785    7170.923      7252.035    21664240918
-## 5 2019-12-05     7253.242     7743.432    7232.677      7448.308    18816085231
-## 6 2019-12-06     7450.562     7546.997    7392.175      7546.997    18104466307
-##   BTC-USD.Adjusted
-## 1         7424.292
-## 2         7321.988
-## 3         7320.146
-## 4         7252.035
-## 5         7448.308
-## 6         7546.997
+## # A tibble: 2,223 × 2
+##   Date       `BTC-USD.LogAdj`
+##   &lt;date&gt;                &lt;dbl&gt;
+## 1 2019-12-01        NA       
+## 2 2019-12-02        -0.0139  
+## 3 2019-12-03        -0.000252
+## 4 2019-12-04        -0.00935 
+## 5 2019-12-05         0.0267  
+## 6 2019-12-06         0.0132  
+## # ℹ 2,217 more rows
 ## 
 ## --- Missing Values per Column ---
-##             Date     BTC-USD.Open     BTC-USD.High      BTC-USD.Low 
-##                0                0                0                0 
-##    BTC-USD.Close   BTC-USD.Volume BTC-USD.Adjusted 
-##                0                0                0 
+## # A tibble: 1 × 2
+##    Date `BTC-USD.LogAdj`
+##   &lt;int&gt;            &lt;int&gt;
+## 1     0                1
 ## 
-## Total Rows with NAs: 0 
-## 
-## ############################
+## Total Rows with NAs: 1 
+## --- Top 10 Missing Rows ---
+## # A tibble: 1 × 2
+##   Date       `BTC-USD.LogAdj`
+##   &lt;date&gt;                &lt;dbl&gt;
+## 1 2019-12-01               NA
 ## INSTRUMENT: SPY 
-## ###########################
-## 
-##         Date SPY.Open SPY.High SPY.Low SPY.Close SPY.Volume SPY.Adjusted
-## 1 2019-12-01       NA       NA      NA        NA         NA           NA
-## 2 2019-12-02   314.59   314.66  311.17    311.64   75767800     282.6761
-## 3 2019-12-03   308.65   309.64  307.13    309.55   73941700     280.7803
-## 4 2019-12-04   310.70   312.12  310.32    311.46   49080000     282.5128
-## 5 2019-12-05   312.23   312.25  310.58    312.02   40709000     283.0209
-## 6 2019-12-06   314.12   315.31  314.11    314.87   48927000     285.6059
+## # A tibble: 2,223 × 2
+##   Date       SPY.LogAdj
+##   &lt;date&gt;          &lt;dbl&gt;
+## 1 2019-12-01   NA      
+## 2 2019-12-02   NA      
+## 3 2019-12-03   -0.00673
+## 4 2019-12-04    0.00615
+## 5 2019-12-05    0.00180
+## 6 2019-12-06    0.00909
+## # ℹ 2,217 more rows
 ## 
 ## --- Missing Values per Column ---
-##         Date     SPY.Open     SPY.High      SPY.Low    SPY.Close   SPY.Volume 
-##            0          695          695          695          695          695 
-## SPY.Adjusted 
-##          695 
+## # A tibble: 1 × 2
+##    Date SPY.LogAdj
+##   &lt;int&gt;      &lt;int&gt;
+## 1     0          2
 ## 
-## Total Rows with NAs: 695 
+## Total Rows with NAs: 2 
 ## --- Top 10 Missing Rows ---
-##          Date SPY.Open SPY.High SPY.Low SPY.Close SPY.Volume SPY.Adjusted
-## 1  2019-12-01       NA       NA      NA        NA         NA           NA
-## 2  2019-12-07       NA       NA      NA        NA         NA           NA
-## 3  2019-12-08       NA       NA      NA        NA         NA           NA
-## 4  2019-12-14       NA       NA      NA        NA         NA           NA
-## 5  2019-12-15       NA       NA      NA        NA         NA           NA
-## 6  2019-12-21       NA       NA      NA        NA         NA           NA
-## 7  2019-12-22       NA       NA      NA        NA         NA           NA
-## 8  2019-12-25       NA       NA      NA        NA         NA           NA
-## 9  2019-12-28       NA       NA      NA        NA         NA           NA
-## 10 2019-12-29       NA       NA      NA        NA         NA           NA
-## 
-## ############################
+## # A tibble: 2 × 2
+##   Date       SPY.LogAdj
+##   &lt;date&gt;          &lt;dbl&gt;
+## 1 2019-12-01         NA
+## 2 2019-12-02         NA
 ## INSTRUMENT: VIX 
-## ###########################
-## 
-##         Date VIX.Open VIX.High VIX.Low VIX.Close VIX.Volume VIX.Adjusted
-## 1 2019-12-01       NA       NA      NA        NA         NA           NA
-## 2 2019-12-02    12.69    15.27   12.55     14.91          0        14.91
-## 3 2019-12-03    14.68    17.99   14.61     15.96          0        15.96
-## 4 2019-12-04    16.38    16.40   14.12     14.80          0        14.80
-## 5 2019-12-05    14.46    15.37   14.17     14.52          0        14.52
-## 6 2019-12-06    14.37    14.47   13.19     13.62          0        13.62
+## # A tibble: 2,223 × 3
+##   Date       VIX.Adjusted VIX.LogAdj
+##   &lt;date&gt;            &lt;dbl&gt;      &lt;dbl&gt;
+## 1 2019-12-01         NA      NA     
+## 2 2019-12-02         14.9    NA     
+## 3 2019-12-03         16.0     0.0681
+## 4 2019-12-04         14.8    -0.0755
+## 5 2019-12-05         14.5    -0.0191
+## 6 2019-12-06         13.6    -0.0640
+## # ℹ 2,217 more rows
 ## 
 ## --- Missing Values per Column ---
-##         Date     VIX.Open     VIX.High      VIX.Low    VIX.Close   VIX.Volume 
-##            0          636          636          636          636          636 
-## VIX.Adjusted 
-##          636 
+## # A tibble: 1 × 3
+##    Date VIX.Adjusted VIX.LogAdj
+##   &lt;int&gt;        &lt;int&gt;      &lt;int&gt;
+## 1     0            1          2
 ## 
-## Total Rows with NAs: 636 
+## Total Rows with NAs: 2 
 ## --- Top 10 Missing Rows ---
-##          Date VIX.Open VIX.High VIX.Low VIX.Close VIX.Volume VIX.Adjusted
-## 1  2019-12-01       NA       NA      NA        NA         NA           NA
-## 2  2019-12-07       NA       NA      NA        NA         NA           NA
-## 3  2019-12-08       NA       NA      NA        NA         NA           NA
-## 4  2019-12-14       NA       NA      NA        NA         NA           NA
-## 5  2019-12-15       NA       NA      NA        NA         NA           NA
-## 6  2019-12-21       NA       NA      NA        NA         NA           NA
-## 7  2019-12-22       NA       NA      NA        NA         NA           NA
-## 8  2019-12-28       NA       NA      NA        NA         NA           NA
-## 9  2019-12-29       NA       NA      NA        NA         NA           NA
-## 10 2020-01-04       NA       NA      NA        NA         NA           NA
-## 
-## ############################
+## # A tibble: 2 × 3
+##   Date       VIX.Adjusted VIX.LogAdj
+##   &lt;date&gt;            &lt;dbl&gt;      &lt;dbl&gt;
+## 1 2019-12-01         NA           NA
+## 2 2019-12-02         14.9         NA
 ## INSTRUMENT: DGS10 
-## ###########################
-## 
-##         Date DGS10
-## 1 2019-12-01    NA
+## # A tibble: 2,223 × 2
+##   Date       DGS10
+##   &lt;date&gt;     &lt;dbl&gt;
+## 1 2019-12-01 NA   
 ## 2 2019-12-02  1.83
 ## 3 2019-12-03  1.72
 ## 4 2019-12-04  1.77
-## 5 2019-12-05  1.80
+## 5 2019-12-05  1.8 
 ## 6 2019-12-06  1.84
+## # ℹ 2,217 more rows
 ## 
 ## --- Missing Values per Column ---
-##  Date DGS10 
-##     0   635 
+## # A tibble: 1 × 2
+##    Date DGS10
+##   &lt;int&gt; &lt;int&gt;
+## 1     0     1
 ## 
-## Total Rows with NAs: 635 
+## Total Rows with NAs: 1 
 ## --- Top 10 Missing Rows ---
-##          Date DGS10
-## 1  2019-12-01    NA
-## 2  2019-12-07    NA
-## 3  2019-12-08    NA
-## 4  2019-12-14    NA
-## 5  2019-12-15    NA
-## 6  2019-12-21    NA
-## 7  2019-12-22    NA
-## 8  2019-12-28    NA
-## 9  2019-12-29    NA
-## 10 2020-01-04    NA
-## 
-## ############################
+## # A tibble: 1 × 2
+##   Date       DGS10
+##   &lt;date&gt;     &lt;dbl&gt;
+## 1 2019-12-01    NA
 ## INSTRUMENT: FEDFUNDS 
-## ###########################
-## 
-##         Date FEDFUNDS
+## # A tibble: 2,223 × 2
+##   Date       FEDFUNDS
+##   &lt;date&gt;        &lt;dbl&gt;
 ## 1 2019-12-01     1.55
-## 2 2019-12-02       NA
-## 3 2019-12-03       NA
-## 4 2019-12-04       NA
-## 5 2019-12-05       NA
-## 6 2019-12-06       NA
+## 2 2019-12-02     1.55
+## 3 2019-12-03     1.55
+## 4 2019-12-04     1.55
+## 5 2019-12-05     1.55
+## 6 2019-12-06     1.55
+## # ℹ 2,217 more rows
 ## 
 ## --- Missing Values per Column ---
-##     Date FEDFUNDS 
-##        0     2150 
+## # A tibble: 1 × 2
+##    Date FEDFUNDS
+##   &lt;int&gt;    &lt;int&gt;
+## 1     0        0
 ## 
-## Total Rows with NAs: 2150 
-## --- Top 10 Missing Rows ---
-##          Date FEDFUNDS
-## 1  2019-12-02       NA
-## 2  2019-12-03       NA
-## 3  2019-12-04       NA
-## 4  2019-12-05       NA
-## 5  2019-12-06       NA
-## 6  2019-12-07       NA
-## 7  2019-12-08       NA
-## 8  2019-12-09       NA
-## 9  2019-12-10       NA
-## 10 2019-12-11       NA
-## 
-## ############################
+## Total Rows with NAs: 0 
 ## INSTRUMENT: CPIAUCSL 
-## ###########################
-## 
-##         Date CPIAUCSL
-## 1 2019-12-01   258.63
-## 2 2019-12-02       NA
-## 3 2019-12-03       NA
-## 4 2019-12-04       NA
-## 5 2019-12-05       NA
-## 6 2019-12-06       NA
+## # A tibble: 2,223 × 2
+##   Date       CPIAUCSL
+##   &lt;date&gt;        &lt;dbl&gt;
+## 1 2019-12-01     259.
+## 2 2019-12-02     259.
+## 3 2019-12-03     259.
+## 4 2019-12-04     259.
+## 5 2019-12-05     259.
+## 6 2019-12-06     259.
+## # ℹ 2,217 more rows
 ## 
 ## --- Missing Values per Column ---
-##     Date CPIAUCSL 
-##        0     2150 
+## # A tibble: 1 × 2
+##    Date CPIAUCSL
+##   &lt;int&gt;    &lt;int&gt;
+## 1     0        0
 ## 
-## Total Rows with NAs: 2150 
+## Total Rows with NAs: 0 
+## INSTRUMENT: DGS2 
+## # A tibble: 2,223 × 2
+##   Date        DGS2
+##   &lt;date&gt;     &lt;dbl&gt;
+## 1 2019-12-01 NA   
+## 2 2019-12-02  1.61
+## 3 2019-12-03  1.53
+## 4 2019-12-04  1.58
+## 5 2019-12-05  1.58
+## 6 2019-12-06  1.61
+## # ℹ 2,217 more rows
+## 
+## --- Missing Values per Column ---
+## # A tibble: 1 × 2
+##    Date  DGS2
+##   &lt;int&gt; &lt;int&gt;
+## 1     0     1
+## 
+## Total Rows with NAs: 1 
 ## --- Top 10 Missing Rows ---
-##          Date CPIAUCSL
-## 1  2019-12-02       NA
-## 2  2019-12-03       NA
-## 3  2019-12-04       NA
-## 4  2019-12-05       NA
-## 5  2019-12-06       NA
-## 6  2019-12-07       NA
-## 7  2019-12-08       NA
-## 8  2019-12-09       NA
-## 9  2019-12-10       NA
-## 10 2019-12-11       NA
-## 
-## ###########################
-## MASTER DF:
-## ###########################
+## # A tibble: 1 × 2
+##   Date        DGS2
+##   &lt;date&gt;     &lt;dbl&gt;
+## 1 2019-12-01    NA
 ## Rows: 2,223
-## Columns: 34
-## $ Date               &lt;date&gt; 2019-12-01, 2019-12-02, 2019-12-03, 2019-12-04, 20…
-## $ AAPL.Open          &lt;dbl&gt; NA, 66.8175, 64.5775, 65.2675, 65.9475, 66.8700, NA…
-## $ AAPL.High          &lt;dbl&gt; NA, 67.0625, 64.8825, 65.8275, 66.4725, 67.7500, NA…
-## $ AAPL.Low           &lt;dbl&gt; NA, 65.8625, 64.0725, 65.1700, 65.6825, 66.8250, NA…
-## $ AAPL.Close         &lt;dbl&gt; NA, 66.0400, 64.8625, 65.4350, 66.3950, 67.6775, NA…
-## $ AAPL.Volume        &lt;dbl&gt; NA, 94487200, 114430400, 67181600, 74424400, 106075…
-## $ AAPL.Adjusted      &lt;dbl&gt; NA, 63.61818, 62.48385, 63.03534, 63.96016, 65.1956…
-## $ PSEI.PS.Open       &lt;dbl&gt; NA, 7769.26, 7858.96, 7848.53, 7789.74, 7796.44, NA…
-## $ PSEI.PS.High       &lt;dbl&gt; NA, 7877.19, 7888.46, 7848.53, 7817.97, 7811.19, NA…
-## $ PSEI.PS.Low        &lt;dbl&gt; NA, 7753.76, 7829.35, 7772.05, 7777.07, 7760.75, NA…
-## $ PSEI.PS.Close      &lt;dbl&gt; NA, 7877.19, 7855.18, 7815.93, 7790.91, 7801.72, NA…
-## $ PSEI.PS.Volume     &lt;dbl&gt; NA, 112900, 123600, 250600, 171400, 152400, NA, NA,…
-## $ PSEI.PS.Adjusted   &lt;dbl&gt; NA, 7875.165, 7853.161, 7813.921, 7788.907, 7799.71…
-## $ `BTC-USD.Open`     &lt;dbl&gt; 7571.616, 7424.036, 7323.976, 7320.125, 7253.242, 7…
-## $ `BTC-USD.High`     &lt;dbl&gt; 7571.616, 7474.819, 7418.859, 7539.785, 7743.432, 7…
-## $ `BTC-USD.Low`      &lt;dbl&gt; 7291.342, 7233.399, 7229.357, 7170.923, 7232.677, 7…
-## $ `BTC-USD.Close`    &lt;dbl&gt; 7424.292, 7321.988, 7320.146, 7252.035, 7448.308, 7…
-## $ `BTC-USD.Volume`   &lt;dbl&gt; 18720708479, 17082040706, 14797485769, 21664240918,…
-## $ `BTC-USD.Adjusted` &lt;dbl&gt; 7424.292, 7321.988, 7320.146, 7252.035, 7448.308, 7…
-## $ SPY.Open           &lt;dbl&gt; NA, 314.59, 308.65, 310.70, 312.23, 314.12, NA, NA,…
-## $ SPY.High           &lt;dbl&gt; NA, 314.66, 309.64, 312.12, 312.25, 315.31, NA, NA,…
-## $ SPY.Low            &lt;dbl&gt; NA, 311.17, 307.13, 310.32, 310.58, 314.11, NA, NA,…
-## $ SPY.Close          &lt;dbl&gt; NA, 311.64, 309.55, 311.46, 312.02, 314.87, NA, NA,…
-## $ SPY.Volume         &lt;dbl&gt; NA, 75767800, 73941700, 49080000, 40709000, 4892700…
-## $ SPY.Adjusted       &lt;dbl&gt; NA, 282.6761, 280.7803, 282.5128, 283.0209, 285.605…
-## $ VIX.Open           &lt;dbl&gt; NA, 12.69, 14.68, 16.38, 14.46, 14.37, NA, NA, 14.2…
-## $ VIX.High           &lt;dbl&gt; NA, 15.27, 17.99, 16.40, 15.37, 14.47, NA, NA, 16.0…
-## $ VIX.Low            &lt;dbl&gt; NA, 12.55, 14.61, 14.12, 14.17, 13.19, NA, NA, 12.2…
-## $ VIX.Close          &lt;dbl&gt; NA, 14.91, 15.96, 14.80, 14.52, 13.62, NA, NA, 15.8…
-## $ VIX.Volume         &lt;dbl&gt; NA, 0, 0, 0, 0, 0, NA, NA, 0, 0, 0, 0, 0, NA, NA, 0…
-## $ VIX.Adjusted       &lt;dbl&gt; NA, 14.91, 15.96, 14.80, 14.52, 13.62, NA, NA, 15.8…
-## $ DGS10              &lt;dbl&gt; NA, 1.83, 1.72, 1.77, 1.80, 1.84, NA, NA, 1.83, 1.8…
-## $ FEDFUNDS           &lt;dbl&gt; 1.55, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, N…
-## $ CPIAUCSL           &lt;dbl&gt; 258.63, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,…</code></pre>
+## Columns: 11
+## $ Date             &lt;date&gt; 2019-12-01, 2019-12-02, 2019-12-03, 2019-12-04, 2019…
+## $ VIX.Adjusted     &lt;dbl&gt; NA, 14.91, 15.96, 14.80, 14.52, 13.62, 13.62, 13.62, …
+## $ DGS10            &lt;dbl&gt; NA, 1.83, 1.72, 1.77, 1.80, 1.84, 1.84, 1.84, 1.83, 1…
+## $ FEDFUNDS         &lt;dbl&gt; 1.55, 1.55, 1.55, 1.55, 1.55, 1.55, 1.55, 1.55, 1.55,…
+## $ CPIAUCSL         &lt;dbl&gt; 258.63, 258.63, 258.63, 258.63, 258.63, 258.63, 258.6…
+## $ DGS2             &lt;dbl&gt; NA, 1.61, 1.53, 1.58, 1.58, 1.61, 1.61, 1.61, 1.63, 1…
+## $ UAL.LogAdj       &lt;dbl&gt; NA, NA, -0.0305840403, -0.0079079103, -0.0035221028, …
+## $ PAL.LogAdj       &lt;dbl&gt; NA, NA, -0.001282874, -0.001284522, -0.005154651, -0.…
+## $ `BTC-USD.LogAdj` &lt;dbl&gt; NA, -0.0138754771, -0.0002517083, -0.0093481325, 0.02…
+## $ SPY.LogAdj       &lt;dbl&gt; NA, NA, -6.728710e-03, 6.151068e-03, 1.796303e-03, 9.…
+## $ VIX.LogAdj       &lt;dbl&gt; NA, NA, 0.0680534759, -0.0754584008, -0.0191001527, -…</code></pre>
 <pre class="r"><code>master_df &lt;- master_df %&gt;%
-  fill(everything(), .direction = &quot;down&quot;)
-
-master_df &lt;- master_df %&gt;%
+  fill(-Date, .direction = &quot;down&quot;) %&gt;%
   filter(Date &gt;= as.Date(&quot;2020-01-01&quot;))
 
 explore_instruments(instruments, master_df)</code></pre>
-<pre><code>## 
-## ############################
-## INSTRUMENT: AAPL 
-## ###########################
-## 
-##         Date AAPL.Open AAPL.High AAPL.Low AAPL.Close AAPL.Volume AAPL.Adjusted
-## 1 2020-01-01   72.4825    73.420  72.3800    73.4125   100805600      70.72030
-## 2 2020-01-02   74.0600    75.150  73.7975    75.0875   135480400      72.33390
-## 3 2020-01-03   74.2875    75.145  74.1250    74.3575   146322800      71.63064
-## 4 2020-01-04   74.2875    75.145  74.1250    74.3575   146322800      71.63064
-## 5 2020-01-05   74.2875    75.145  74.1250    74.3575   146322800      71.63064
-## 6 2020-01-06   73.4475    74.990  73.1875    74.9500   118387200      72.20143
-## 
-## --- Missing Values per Column ---
-##          Date     AAPL.Open     AAPL.High      AAPL.Low    AAPL.Close 
-##             0             0             0             0             0 
-##   AAPL.Volume AAPL.Adjusted 
-##             0             0 
-## 
-## Total Rows with NAs: 0 
-## 
-## ############################
-## INSTRUMENT: PSEI.PS 
-## ###########################
-## 
-##         Date PSEI.PS.Open PSEI.PS.High PSEI.PS.Low PSEI.PS.Close PSEI.PS.Volume
-## 1 2020-01-01      7848.39      7891.99     7815.26       7815.26         177800
-## 2 2020-01-02      7721.26      7742.53     7643.98       7742.53         101100
-## 3 2020-01-03      7737.70      7890.94     7737.70       7839.79         118900
-## 4 2020-01-04      7737.70      7890.94     7737.70       7839.79         118900
-## 5 2020-01-05      7737.70      7890.94     7737.70       7839.79         118900
-## 6 2020-01-06      7802.86      7802.86     7697.89       7797.87         102100
-##   PSEI.PS.Adjusted
-## 1         7813.250
-## 2         7740.540
-## 3         7837.774
-## 4         7837.774
-## 5         7837.774
-## 6         7795.866
+<pre><code>## INSTRUMENT: UAL 
+## # A tibble: 2,192 × 2
+##   Date       UAL.LogAdj
+##   &lt;date&gt;          &lt;dbl&gt;
+## 1 2020-01-01    0      
+## 2 2020-01-02    0.0186 
+## 3 2020-01-03   -0.0207 
+## 4 2020-01-04    0      
+## 5 2020-01-05    0      
+## 6 2020-01-06   -0.00228
+## # ℹ 2,186 more rows
 ## 
 ## --- Missing Values per Column ---
-##             Date     PSEI.PS.Open     PSEI.PS.High      PSEI.PS.Low 
-##                0                0                0                0 
-##    PSEI.PS.Close   PSEI.PS.Volume PSEI.PS.Adjusted 
-##                0                0                0 
+## # A tibble: 1 × 2
+##    Date UAL.LogAdj
+##   &lt;int&gt;      &lt;int&gt;
+## 1     0          0
 ## 
 ## Total Rows with NAs: 0 
+## INSTRUMENT: PAL 
+## # A tibble: 2,192 × 2
+##   Date       PAL.LogAdj
+##   &lt;date&gt;          &lt;dbl&gt;
+## 1 2020-01-01    0      
+## 2 2020-01-02   -0.00767
+## 3 2020-01-03   -0.0774 
+## 4 2020-01-04    0      
+## 5 2020-01-05    0      
+## 6 2020-01-06    0.0287 
+## # ℹ 2,186 more rows
 ## 
-## ############################
+## --- Missing Values per Column ---
+## # A tibble: 1 × 2
+##    Date PAL.LogAdj
+##   &lt;int&gt;      &lt;int&gt;
+## 1     0          0
+## 
+## Total Rows with NAs: 0 
 ## INSTRUMENT: BTC-USD 
-## ###########################
-## 
-##         Date BTC-USD.Open BTC-USD.High BTC-USD.Low BTC-USD.Close BTC-USD.Volume
-## 1 2020-01-01     7194.892     7254.331    7174.944      7200.174    18565664997
-## 2 2020-01-02     7202.551     7212.155    6935.270      6985.470    20802083465
-## 3 2020-01-03     6984.429     7413.715    6914.996      7344.884    28111481032
-## 4 2020-01-04     7345.375     7427.386    7309.514      7410.657    18444271275
-## 5 2020-01-05     7410.452     7544.497    7400.536      7411.317    19725074095
-## 6 2020-01-06     7410.452     7781.867    7409.293      7769.219    23276261598
-##   BTC-USD.Adjusted
-## 1         7200.174
-## 2         6985.470
-## 3         7344.884
-## 4         7410.657
-## 5         7411.317
-## 6         7769.219
+## # A tibble: 2,192 × 2
+##   Date       `BTC-USD.LogAdj`
+##   &lt;date&gt;                &lt;dbl&gt;
+## 1 2020-01-01        0.000914 
+## 2 2020-01-02       -0.0303   
+## 3 2020-01-03        0.0502   
+## 4 2020-01-04        0.00892  
+## 5 2020-01-05        0.0000891
+## 6 2020-01-06        0.0472   
+## # ℹ 2,186 more rows
 ## 
 ## --- Missing Values per Column ---
-##             Date     BTC-USD.Open     BTC-USD.High      BTC-USD.Low 
-##                0                0                0                0 
-##    BTC-USD.Close   BTC-USD.Volume BTC-USD.Adjusted 
-##                0                0                0 
+## # A tibble: 1 × 2
+##    Date `BTC-USD.LogAdj`
+##   &lt;int&gt;            &lt;int&gt;
+## 1     0                0
 ## 
 ## Total Rows with NAs: 0 
-## 
-## ############################
 ## INSTRUMENT: SPY 
-## ###########################
-## 
-##         Date SPY.Open SPY.High SPY.Low SPY.Close SPY.Volume SPY.Adjusted
-## 1 2020-01-01   320.53   322.13  320.15    321.86   57077300     293.3816
-## 2 2020-01-02   323.54   324.89  322.53    324.87   59151200     296.1253
-## 3 2020-01-03   321.16   323.64  321.10    322.41   77709700     293.8829
-## 4 2020-01-04   321.16   323.64  321.10    322.41   77709700     293.8829
-## 5 2020-01-05   321.16   323.64  321.10    322.41   77709700     293.8829
-## 6 2020-01-06   320.49   323.73  320.36    323.64   55653900     295.0042
+## # A tibble: 2,192 × 2
+##   Date       SPY.LogAdj
+##   &lt;date&gt;          &lt;dbl&gt;
+## 1 2020-01-01    0      
+## 2 2020-01-02    0.00931
+## 3 2020-01-03   -0.00760
+## 4 2020-01-04    0      
+## 5 2020-01-05    0      
+## 6 2020-01-06    0.00381
+## # ℹ 2,186 more rows
 ## 
 ## --- Missing Values per Column ---
-##         Date     SPY.Open     SPY.High      SPY.Low    SPY.Close   SPY.Volume 
-##            0            0            0            0            0            0 
-## SPY.Adjusted 
-##            0 
+## # A tibble: 1 × 2
+##    Date SPY.LogAdj
+##   &lt;int&gt;      &lt;int&gt;
+## 1     0          0
 ## 
 ## Total Rows with NAs: 0 
-## 
-## ############################
 ## INSTRUMENT: VIX 
-## ###########################
-## 
-##         Date VIX.Open VIX.High VIX.Low VIX.Close VIX.Volume VIX.Adjusted
-## 1 2020-01-01    14.84    15.39   13.75     13.78          0        13.78
-## 2 2020-01-02    13.46    13.72   12.42     12.47          0        12.47
-## 3 2020-01-03    15.01    16.20   13.13     14.02          0        14.02
-## 4 2020-01-04    15.01    16.20   13.13     14.02          0        14.02
-## 5 2020-01-05    15.01    16.20   13.13     14.02          0        14.02
-## 6 2020-01-06    15.45    16.39   13.54     13.85          0        13.85
+## # A tibble: 2,192 × 3
+##   Date       VIX.Adjusted VIX.LogAdj
+##   &lt;date&gt;            &lt;dbl&gt;      &lt;dbl&gt;
+## 1 2020-01-01         13.8     0     
+## 2 2020-01-02         12.5    -0.0999
+## 3 2020-01-03         14.0     0.117 
+## 4 2020-01-04         14.0     0     
+## 5 2020-01-05         14.0     0     
+## 6 2020-01-06         13.9    -0.0122
+## # ℹ 2,186 more rows
 ## 
 ## --- Missing Values per Column ---
-##         Date     VIX.Open     VIX.High      VIX.Low    VIX.Close   VIX.Volume 
-##            0            0            0            0            0            0 
-## VIX.Adjusted 
-##            0 
+## # A tibble: 1 × 3
+##    Date VIX.Adjusted VIX.LogAdj
+##   &lt;int&gt;        &lt;int&gt;      &lt;int&gt;
+## 1     0            0          0
 ## 
 ## Total Rows with NAs: 0 
-## 
-## ############################
 ## INSTRUMENT: DGS10 
-## ###########################
-## 
-##         Date DGS10
+## # A tibble: 2,192 × 2
+##   Date       DGS10
+##   &lt;date&gt;     &lt;dbl&gt;
 ## 1 2020-01-01  1.92
 ## 2 2020-01-02  1.88
-## 3 2020-01-03  1.80
-## 4 2020-01-04  1.80
-## 5 2020-01-05  1.80
+## 3 2020-01-03  1.8 
+## 4 2020-01-04  1.8 
+## 5 2020-01-05  1.8 
 ## 6 2020-01-06  1.81
+## # ℹ 2,186 more rows
 ## 
 ## --- Missing Values per Column ---
-##  Date DGS10 
-##     0     0 
+## # A tibble: 1 × 2
+##    Date DGS10
+##   &lt;int&gt; &lt;int&gt;
+## 1     0     0
 ## 
 ## Total Rows with NAs: 0 
-## 
-## ############################
 ## INSTRUMENT: FEDFUNDS 
-## ###########################
-## 
-##         Date FEDFUNDS
+## # A tibble: 2,192 × 2
+##   Date       FEDFUNDS
+##   &lt;date&gt;        &lt;dbl&gt;
 ## 1 2020-01-01     1.55
 ## 2 2020-01-02     1.55
 ## 3 2020-01-03     1.55
 ## 4 2020-01-04     1.55
 ## 5 2020-01-05     1.55
 ## 6 2020-01-06     1.55
+## # ℹ 2,186 more rows
 ## 
 ## --- Missing Values per Column ---
-##     Date FEDFUNDS 
-##        0        0 
+## # A tibble: 1 × 2
+##    Date FEDFUNDS
+##   &lt;int&gt;    &lt;int&gt;
+## 1     0        0
 ## 
 ## Total Rows with NAs: 0 
-## 
-## ############################
 ## INSTRUMENT: CPIAUCSL 
-## ###########################
-## 
-##         Date CPIAUCSL
-## 1 2020-01-01  259.127
-## 2 2020-01-02  259.127
-## 3 2020-01-03  259.127
-## 4 2020-01-04  259.127
-## 5 2020-01-05  259.127
-## 6 2020-01-06  259.127
+## # A tibble: 2,192 × 2
+##   Date       CPIAUCSL
+##   &lt;date&gt;        &lt;dbl&gt;
+## 1 2020-01-01     259.
+## 2 2020-01-02     259.
+## 3 2020-01-03     259.
+## 4 2020-01-04     259.
+## 5 2020-01-05     259.
+## 6 2020-01-06     259.
+## # ℹ 2,186 more rows
 ## 
 ## --- Missing Values per Column ---
-##     Date CPIAUCSL 
-##        0        0 
+## # A tibble: 1 × 2
+##    Date CPIAUCSL
+##   &lt;int&gt;    &lt;int&gt;
+## 1     0        0
 ## 
 ## Total Rows with NAs: 0 
+## INSTRUMENT: DGS2 
+## # A tibble: 2,192 × 2
+##   Date        DGS2
+##   &lt;date&gt;     &lt;dbl&gt;
+## 1 2020-01-01  1.58
+## 2 2020-01-02  1.58
+## 3 2020-01-03  1.53
+## 4 2020-01-04  1.53
+## 5 2020-01-05  1.53
+## 6 2020-01-06  1.54
+## # ℹ 2,186 more rows
 ## 
-## ###########################
-## MASTER DF:
-## ###########################
+## --- Missing Values per Column ---
+## # A tibble: 1 × 2
+##    Date  DGS2
+##   &lt;int&gt; &lt;int&gt;
+## 1     0     0
+## 
+## Total Rows with NAs: 0 
 ## Rows: 2,192
-## Columns: 34
-## $ Date               &lt;date&gt; 2020-01-01, 2020-01-02, 2020-01-03, 2020-01-04, 20…
-## $ AAPL.Open          &lt;dbl&gt; 72.4825, 74.0600, 74.2875, 74.2875, 74.2875, 73.447…
-## $ AAPL.High          &lt;dbl&gt; 73.4200, 75.1500, 75.1450, 75.1450, 75.1450, 74.990…
-## $ AAPL.Low           &lt;dbl&gt; 72.3800, 73.7975, 74.1250, 74.1250, 74.1250, 73.187…
-## $ AAPL.Close         &lt;dbl&gt; 73.4125, 75.0875, 74.3575, 74.3575, 74.3575, 74.950…
-## $ AAPL.Volume        &lt;dbl&gt; 100805600, 135480400, 146322800, 146322800, 1463228…
-## $ AAPL.Adjusted      &lt;dbl&gt; 70.72030, 72.33390, 71.63064, 71.63064, 71.63064, 7…
-## $ PSEI.PS.Open       &lt;dbl&gt; 7848.39, 7721.26, 7737.70, 7737.70, 7737.70, 7802.8…
-## $ PSEI.PS.High       &lt;dbl&gt; 7891.99, 7742.53, 7890.94, 7890.94, 7890.94, 7802.8…
-## $ PSEI.PS.Low        &lt;dbl&gt; 7815.26, 7643.98, 7737.70, 7737.70, 7737.70, 7697.8…
-## $ PSEI.PS.Close      &lt;dbl&gt; 7815.26, 7742.53, 7839.79, 7839.79, 7839.79, 7797.8…
-## $ PSEI.PS.Volume     &lt;dbl&gt; 177800, 101100, 118900, 118900, 118900, 102100, 248…
-## $ PSEI.PS.Adjusted   &lt;dbl&gt; 7813.250, 7740.540, 7837.774, 7837.774, 7837.774, 7…
-## $ `BTC-USD.Open`     &lt;dbl&gt; 7194.892, 7202.551, 6984.429, 7345.375, 7410.452, 7…
-## $ `BTC-USD.High`     &lt;dbl&gt; 7254.331, 7212.155, 7413.715, 7427.386, 7544.497, 7…
-## $ `BTC-USD.Low`      &lt;dbl&gt; 7174.944, 6935.270, 6914.996, 7309.514, 7400.536, 7…
-## $ `BTC-USD.Close`    &lt;dbl&gt; 7200.174, 6985.470, 7344.884, 7410.657, 7411.317, 7…
-## $ `BTC-USD.Volume`   &lt;dbl&gt; 18565664997, 20802083465, 28111481032, 18444271275,…
-## $ `BTC-USD.Adjusted` &lt;dbl&gt; 7200.174, 6985.470, 7344.884, 7410.657, 7411.317, 7…
-## $ SPY.Open           &lt;dbl&gt; 320.53, 323.54, 321.16, 321.16, 321.16, 320.49, 323…
-## $ SPY.High           &lt;dbl&gt; 322.13, 324.89, 323.64, 323.64, 323.64, 323.73, 323…
-## $ SPY.Low            &lt;dbl&gt; 320.15, 322.53, 321.10, 321.10, 321.10, 320.36, 322…
-## $ SPY.Close          &lt;dbl&gt; 321.86, 324.87, 322.41, 322.41, 322.41, 323.64, 322…
-## $ SPY.Volume         &lt;dbl&gt; 57077300, 59151200, 77709700, 77709700, 77709700, 5…
-## $ SPY.Adjusted       &lt;dbl&gt; 293.3816, 296.1253, 293.8829, 293.8829, 293.8829, 2…
-## $ VIX.Open           &lt;dbl&gt; 14.84, 13.46, 15.01, 15.01, 15.01, 15.45, 13.84, 15…
-## $ VIX.High           &lt;dbl&gt; 15.39, 13.72, 16.20, 16.20, 16.20, 16.39, 14.46, 15…
-## $ VIX.Low            &lt;dbl&gt; 13.75, 12.42, 13.13, 13.13, 13.13, 13.54, 13.39, 12…
-## $ VIX.Close          &lt;dbl&gt; 13.78, 12.47, 14.02, 14.02, 14.02, 13.85, 13.79, 13…
-## $ VIX.Volume         &lt;dbl&gt; 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, …
-## $ VIX.Adjusted       &lt;dbl&gt; 13.78, 12.47, 14.02, 14.02, 14.02, 13.85, 13.79, 13…
-## $ DGS10              &lt;dbl&gt; 1.92, 1.88, 1.80, 1.80, 1.80, 1.81, 1.83, 1.87, 1.8…
-## $ FEDFUNDS           &lt;dbl&gt; 1.55, 1.55, 1.55, 1.55, 1.55, 1.55, 1.55, 1.55, 1.5…
-## $ CPIAUCSL           &lt;dbl&gt; 259.127, 259.127, 259.127, 259.127, 259.127, 259.12…</code></pre>
+## Columns: 11
+## $ Date             &lt;date&gt; 2020-01-01, 2020-01-02, 2020-01-03, 2020-01-04, 2020…
+## $ VIX.Adjusted     &lt;dbl&gt; 13.78, 12.47, 14.02, 14.02, 14.02, 13.85, 13.79, 13.4…
+## $ DGS10            &lt;dbl&gt; 1.92, 1.88, 1.80, 1.80, 1.80, 1.81, 1.83, 1.87, 1.85,…
+## $ FEDFUNDS         &lt;dbl&gt; 1.55, 1.55, 1.55, 1.55, 1.55, 1.55, 1.55, 1.55, 1.55,…
+## $ CPIAUCSL         &lt;dbl&gt; 259.127, 259.127, 259.127, 259.127, 259.127, 259.127,…
+## $ DGS2             &lt;dbl&gt; 1.58, 1.58, 1.53, 1.53, 1.53, 1.54, 1.54, 1.58, 1.58,…
+## $ UAL.LogAdj       &lt;dbl&gt; 0.000000000, 0.018557599, -0.020716755, 0.000000000, …
+## $ PAL.LogAdj       &lt;dbl&gt; 0.000000000, -0.007672672, -0.077371909, 0.000000000,…
+## $ `BTC-USD.LogAdj` &lt;dbl&gt; 9.136167e-04, -3.027293e-02, 5.017175e-02, 8.915010e-…
+## $ SPY.LogAdj       &lt;dbl&gt; 0.0000000000, 0.0093085693, -0.0076010821, 0.00000000…
+## $ VIX.LogAdj       &lt;dbl&gt; 0.000000000, -0.099892465, 0.117159133, 0.000000000, …</code></pre>
 </div>
 <div id="descriptive-statistics-visualization" class="section level1" number="5">
 <h1><span class="header-section-number">5</span> Descriptive Statistics
@@ -1403,49 +1592,35 @@ explore_instruments(instruments, master_df)</code></pre>
   
   base_df &lt;- df %&gt;%
     select(Date, all_of(target_cols)) %&gt;%
-    pivot_longer(cols = -Date, names_to = &quot;Instrument&quot;, values_to = &quot;Value&quot;)
-  
-  if (frequency == &quot;yearly&quot;) {
-    base_df &lt;- base_df %&gt;%
-      mutate(Period = format(Date, &quot;%Y&quot;)) %&gt;%
-      group_by(Instrument, Period)
-      
-  } else if (frequency == &quot;quarterly&quot;) {
-    base_df &lt;- base_df %&gt;%
-      mutate(Period = paste0(format(Date, &quot;%Y&quot;), &quot;-&quot;, quarters(Date))) %&gt;%
-      group_by(Instrument, Period)
-      
-  } else if (frequency == &quot;monthly&quot;) {
-    base_df &lt;- base_df %&gt;%
-      mutate(Period = format(Date, &quot;%Y-%m&quot;)) %&gt;%
-      group_by(Instrument, Period)
-      
-  } else if (frequency == &quot;seasonal_quarter&quot;) {
-    base_df &lt;- base_df %&gt;%
-      mutate(Period = quarters(Date)) %&gt;%
-      group_by(Instrument, Period)
-      
-  } else if (frequency == &quot;seasonal_month&quot;) {
-    base_df &lt;- base_df %&gt;%
-      mutate(Period = format(Date, &quot;%m&quot;)) %&gt;%
-      group_by(Instrument, Period)
-      
-  } else {
-    base_df &lt;- base_df %&gt;%
-      mutate(Period = &quot;Overall&quot;) %&gt;%
-      group_by(Instrument, Period)
-  }
+    pivot_longer(cols = -Date, names_to = &quot;Instrument&quot;, values_to = &quot;Value&quot;) %&gt;%
+    mutate(
+      Period = if (frequency == &quot;yearly&quot;) {
+        format(Date, &quot;%Y&quot;)
+      } else if (frequency == &quot;quarterly&quot;) {
+        paste0(format(Date, &quot;%Y&quot;), &quot;-&quot;, quarters(Date))
+      } else if (frequency == &quot;monthly&quot;) {
+        format(Date, &quot;%Y-%m&quot;)
+      } else if (frequency == &quot;seasonal_quarter&quot;) {
+        quarters(Date)
+      } else if (frequency == &quot;seasonal_month&quot;) {
+        format(Date, &quot;%m&quot;)
+      } else {
+        &quot;Overall&quot;
+      }
+    ) %&gt;%
+    group_by(Instrument, Period)
   
   summary_stats &lt;- base_df %&gt;%
     summarise(
       Mean = mean(Value, na.rm = TRUE),
       Median = median(Value, na.rm = TRUE),
+      Sum = sum(Value, na.rm = TRUE),
       Variance = var(Value, na.rm = TRUE),
       Std_Dev = sd(Value, na.rm = TRUE),
       Min = min(Value, na.rm = TRUE),
       Max = max(Value, na.rm = TRUE),
       Range = Max - Min,
-      Skewness = skewness(Value, na.rm = TRUE),
+      Skewness = skewness(Value, na.rm = TRUE), 
       Kurtosis = kurtosis(Value, na.rm = TRUE),
       .groups = &quot;drop&quot;
     ) %&gt;%
@@ -1465,126 +1640,717 @@ explore_instruments(instruments, master_df)</code></pre>
 }
 
 target_cols &lt;- c(
-  &quot;AAPL.Close&quot;, 
-  &quot;PSEI.PS.Close&quot;, 
-  &quot;BTC-USD.Close&quot;, 
-  &quot;SPY.Close&quot;, 
-  &quot;VIX.Close&quot;, 
+  &quot;UAL.LogAdj&quot;, 
+  &quot;PAL.LogAdj&quot;, 
+  &quot;BTC-USD.LogAdj&quot;, 
+  &quot;SPY.LogAdj&quot;, 
+  &quot;VIX.LogAdj&quot;,
+  &quot;VIX.Adjusted&quot;,
   &quot;DGS10&quot;, 
   &quot;FEDFUNDS&quot;, 
-  &quot;CPIAUCSL&quot;
+  &quot;CPIAUCSL&quot;,
+  &quot;DGS2&quot;
 )
 
 print(get_summary_stats(master_df, target_cols, frequency = &quot;overall&quot;))</code></pre>
-<pre><code>## # A tibble: 8 × 11
-##   Instrument    Period      Mean   Median Variance Std_Dev     Min    Max  Range
-##   &lt;chr&gt;         &lt;chr&gt;      &lt;dbl&gt;    &lt;dbl&gt;    &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;
-## 1 AAPL.Close    Overall   167.     166.     2.40e3  4.90e1   56.1  2.86e2 2.30e2
-## 2 BTC-USD.Close Overall 47195.   39761.     9.87e8  3.14e4 4971.   1.25e5 1.20e5
-## 3 CPIAUCSL      Overall   294.     300.     5.24e2  2.29e1  256.   3.26e2 7.02e1
-## 4 DGS10         Overall     2.96     3.57   1.98e0  1.41e0    0.52 4.98e0 4.46e0
-## 5 FEDFUNDS      Overall     2.75     3.83   4.91e0  2.22e0    0.05 5.33e0 5.28e0
-## 6 PSEI.PS.Close Overall  6553.    6524.     2.21e5  4.70e2 4623.   7.84e3 3.22e3
-## 7 SPY.Close     Overall   457.     438.     1.05e4  1.02e2  223.   6.90e2 4.67e2
-## 8 VIX.Close     Overall    20.9     18.9    6.07e1  7.79e0   11.9  8.27e1 7.08e1
+<pre><code>## # A tibble: 10 × 12
+##    Instrument Period   Mean Median      Sum Variance Std_Dev    Min    Max Range
+##    &lt;chr&gt;      &lt;chr&gt;   &lt;dbl&gt;  &lt;dbl&gt;    &lt;dbl&gt;    &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt; &lt;dbl&gt;
+##  1 BTC-USD.L… Overa…   0      0     2.5 e+0     0       0.03  -0.46   0.17  0.64
+##  2 CPIAUCSL   Overa… 294.   300.    6.44e+5   524.     22.9  256.   326.   70.2 
+##  3 DGS10      Overa…   2.96   3.57  6.48e+3     1.98    1.41   0.52   4.98  4.46
+##  4 DGS2       Overa…   2.74   3.58  6.00e+3     3.46    1.86   0.09   5.19  5.1 
+##  5 FEDFUNDS   Overa…   2.75   3.83  6.04e+3     4.91    2.22   0.05   5.33  5.28
+##  6 PAL.LogAdj Overa…   0      0    -7.3 e-1     0       0.02  -0.18   0.19  0.37
+##  7 SPY.LogAdj Overa…   0      0     8.5 e-1     0       0.01  -0.12   0.1   0.22
+##  8 UAL.LogAdj Overa…   0      0     2.4 e-1     0       0.03  -0.36   0.23  0.59
+##  9 VIX.Adjus… Overa…  20.9   18.9   4.57e+4    60.7     7.79  11.9   82.7  70.8 
+## 10 VIX.LogAdj Overa…   0      0     4   e-2     0       0.07  -0.44   0.55  1   
 ## # ℹ 2 more variables: Skewness &lt;dbl&gt;, Kurtosis &lt;dbl&gt;</code></pre>
 <pre class="r"><code>print(get_summary_stats(master_df, target_cols, &quot;yearly&quot;))</code></pre>
-<pre><code>## # A tibble: 6 × 73
-##   Period AAPL.Close_Mean `BTC-USD.Close_Mean` CPIAUCSL_Mean DGS10_Mean
-##   &lt;chr&gt;            &lt;dbl&gt;                &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;
-## 1 2020              95.0               11116.          259.       0.89
-## 2 2021             141.                47437.          271.       1.44
-## 3 2022             155.                28198.          293.       2.95
-## 4 2023             173.                28859.          305.       3.96
-## 5 2024             207.                65964.          314.       4.21
-## 6 2025             232.               101642.          322.       4.3 
-## # ℹ 68 more variables: FEDFUNDS_Mean &lt;dbl&gt;, PSEI.PS.Close_Mean &lt;dbl&gt;,
-## #   SPY.Close_Mean &lt;dbl&gt;, VIX.Close_Mean &lt;dbl&gt;, AAPL.Close_Median &lt;dbl&gt;,
-## #   `BTC-USD.Close_Median` &lt;dbl&gt;, CPIAUCSL_Median &lt;dbl&gt;, DGS10_Median &lt;dbl&gt;,
-## #   FEDFUNDS_Median &lt;dbl&gt;, PSEI.PS.Close_Median &lt;dbl&gt;, SPY.Close_Median &lt;dbl&gt;,
-## #   VIX.Close_Median &lt;dbl&gt;, AAPL.Close_Variance &lt;dbl&gt;,
-## #   `BTC-USD.Close_Variance` &lt;dbl&gt;, CPIAUCSL_Variance &lt;dbl&gt;,
-## #   DGS10_Variance &lt;dbl&gt;, FEDFUNDS_Variance &lt;dbl&gt;, …</code></pre>
+<pre><code>## # A tibble: 60 × 92
+##    Period      Sum `BTC-USD.LogAdj_Mean` CPIAUCSL_Mean DGS10_Mean DGS2_Mean
+##    &lt;chr&gt;     &lt;dbl&gt;                 &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;     &lt;dbl&gt;
+##  1 2020       1.39                     0           NA       NA        NA   
+##  2 2020   94742.                      NA          259.      NA        NA   
+##  3 2020     327.                      NA           NA        0.89     NA   
+##  4 2020     144.                      NA           NA       NA         0.39
+##  5 2020     136.                      NA           NA       NA        NA   
+##  6 2020      -0.18                    NA           NA       NA        NA   
+##  7 2020       0.17                    NA           NA       NA        NA   
+##  8 2020      -0.71                    NA           NA       NA        NA   
+##  9 2020   10594.                      NA           NA       NA        NA   
+## 10 2020       0.5                     NA           NA       NA        NA   
+## # ℹ 50 more rows
+## # ℹ 86 more variables: FEDFUNDS_Mean &lt;dbl&gt;, PAL.LogAdj_Mean &lt;dbl&gt;,
+## #   SPY.LogAdj_Mean &lt;dbl&gt;, UAL.LogAdj_Mean &lt;dbl&gt;, VIX.Adjusted_Mean &lt;dbl&gt;,
+## #   VIX.LogAdj_Mean &lt;dbl&gt;, `BTC-USD.LogAdj_Median` &lt;dbl&gt;,
+## #   CPIAUCSL_Median &lt;dbl&gt;, DGS10_Median &lt;dbl&gt;, DGS2_Median &lt;dbl&gt;,
+## #   FEDFUNDS_Median &lt;dbl&gt;, PAL.LogAdj_Median &lt;dbl&gt;, SPY.LogAdj_Median &lt;dbl&gt;,
+## #   UAL.LogAdj_Median &lt;dbl&gt;, VIX.Adjusted_Median &lt;dbl&gt;, …</code></pre>
 <pre class="r"><code>print(get_summary_stats(master_df, target_cols, &quot;quarterly&quot;))</code></pre>
-<pre><code>## # A tibble: 24 × 73
-##    Period  AAPL.Close_Mean `BTC-USD.Close_Mean` CPIAUCSL_Mean DGS10_Mean
-##    &lt;chr&gt;             &lt;dbl&gt;                &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;
-##  1 2020-Q1            73.7                8268.          259.       1.38
-##  2 2020-Q2            77.2                8666.          256.       0.69
-##  3 2020-Q3           109.                10634.          259.       0.65
-##  4 2020-Q4           120.                16841.          261.       0.86
-##  5 2021-Q1           128.                45324.          264.       1.32
-##  6 2021-Q2           129.                46498.          269.       1.59
-##  7 2021-Q3           147.                41989.          273.       1.33
-##  8 2021-Q4           158.                55881.          279.       1.53
-##  9 2022-Q1           168.                41299.          285.       1.93
-## 10 2022-Q2           152.                32500.          292.       2.93
-## # ℹ 14 more rows
-## # ℹ 68 more variables: FEDFUNDS_Mean &lt;dbl&gt;, PSEI.PS.Close_Mean &lt;dbl&gt;,
-## #   SPY.Close_Mean &lt;dbl&gt;, VIX.Close_Mean &lt;dbl&gt;, AAPL.Close_Median &lt;dbl&gt;,
-## #   `BTC-USD.Close_Median` &lt;dbl&gt;, CPIAUCSL_Median &lt;dbl&gt;, DGS10_Median &lt;dbl&gt;,
-## #   FEDFUNDS_Median &lt;dbl&gt;, PSEI.PS.Close_Median &lt;dbl&gt;, SPY.Close_Median &lt;dbl&gt;,
-## #   VIX.Close_Median &lt;dbl&gt;, AAPL.Close_Variance &lt;dbl&gt;,
-## #   `BTC-USD.Close_Variance` &lt;dbl&gt;, CPIAUCSL_Variance &lt;dbl&gt;, …</code></pre>
+<pre><code>## # A tibble: 236 × 92
+##    Period       Sum `BTC-USD.LogAdj_Mean` CPIAUCSL_Mean DGS10_Mean DGS2_Mean
+##    &lt;chr&gt;      &lt;dbl&gt;                 &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;     &lt;dbl&gt;
+##  1 2020-Q1    -0.11                     0           NA       NA         NA  
+##  2 2020-Q1 23552.                      NA          259.      NA         NA  
+##  3 2020-Q1   126.                      NA           NA        1.38      NA  
+##  4 2020-Q1    99.9                     NA           NA       NA          1.1
+##  5 2020-Q1   114.                      NA           NA       NA         NA  
+##  6 2020-Q1    -0.17                    NA           NA       NA         NA  
+##  7 2020-Q1    -0.22                    NA           NA       NA         NA  
+##  8 2020-Q1    -1.03                    NA           NA       NA         NA  
+##  9 2020-Q1  2755.                      NA           NA       NA         NA  
+## 10 2020-Q1     1.36                    NA           NA       NA         NA  
+## # ℹ 226 more rows
+## # ℹ 86 more variables: FEDFUNDS_Mean &lt;dbl&gt;, PAL.LogAdj_Mean &lt;dbl&gt;,
+## #   SPY.LogAdj_Mean &lt;dbl&gt;, UAL.LogAdj_Mean &lt;dbl&gt;, VIX.Adjusted_Mean &lt;dbl&gt;,
+## #   VIX.LogAdj_Mean &lt;dbl&gt;, `BTC-USD.LogAdj_Median` &lt;dbl&gt;,
+## #   CPIAUCSL_Median &lt;dbl&gt;, DGS10_Median &lt;dbl&gt;, DGS2_Median &lt;dbl&gt;,
+## #   FEDFUNDS_Median &lt;dbl&gt;, PAL.LogAdj_Median &lt;dbl&gt;, SPY.LogAdj_Median &lt;dbl&gt;,
+## #   UAL.LogAdj_Median &lt;dbl&gt;, VIX.Adjusted_Median &lt;dbl&gt;, …</code></pre>
 <pre class="r"><code>print(get_summary_stats(master_df, target_cols, &quot;monthly&quot;))</code></pre>
-<pre><code>## # A tibble: 72 × 73
-##    Period  AAPL.Close_Mean `BTC-USD.Close_Mean` CPIAUCSL_Mean DGS10_Mean
-##    &lt;chr&gt;             &lt;dbl&gt;                &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;
-##  1 2020-01            77.8                8389.          259.       1.77
-##  2 2020-02            78                  9631.          259.       1.5 
-##  3 2020-03            65.6                6871.          258.       0.87
-##  4 2020-04            67.8                7224.          256.       0.66
-##  5 2020-05            77.5                9263.          256.       0.67
-##  6 2020-06            86.3                9489.          257.       0.73
-##  7 2020-07            95.0                9590.          258.       0.63
-##  8 2020-08           117.                11652.          259.       0.65
-##  9 2020-09           115.                10660.          260        0.68
-## 10 2020-10           116.                11887.          260.       0.79
-## # ℹ 62 more rows
-## # ℹ 68 more variables: FEDFUNDS_Mean &lt;dbl&gt;, PSEI.PS.Close_Mean &lt;dbl&gt;,
-## #   SPY.Close_Mean &lt;dbl&gt;, VIX.Close_Mean &lt;dbl&gt;, AAPL.Close_Median &lt;dbl&gt;,
-## #   `BTC-USD.Close_Median` &lt;dbl&gt;, CPIAUCSL_Median &lt;dbl&gt;, DGS10_Median &lt;dbl&gt;,
-## #   FEDFUNDS_Median &lt;dbl&gt;, PSEI.PS.Close_Median &lt;dbl&gt;, SPY.Close_Median &lt;dbl&gt;,
-## #   VIX.Close_Median &lt;dbl&gt;, AAPL.Close_Variance &lt;dbl&gt;,
-## #   `BTC-USD.Close_Variance` &lt;dbl&gt;, CPIAUCSL_Variance &lt;dbl&gt;, …</code></pre>
+<pre><code>## # A tibble: 705 × 92
+##    Period      Sum `BTC-USD.LogAdj_Mean` CPIAUCSL_Mean DGS10_Mean DGS2_Mean
+##    &lt;chr&gt;     &lt;dbl&gt;                 &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;     &lt;dbl&gt;
+##  1 2020-01    0.26                  0.01           NA       NA        NA   
+##  2 2020-01 8033.                   NA             259.      NA        NA   
+##  3 2020-01   55.0                  NA              NA        1.77     NA   
+##  4 2020-01   47.4                  NA              NA       NA         1.53
+##  5 2020-01   48.0                  NA              NA       NA        NA   
+##  6 2020-01   -0.06                 NA              NA       NA        NA   
+##  7 2020-01    0                    NA              NA       NA        NA   
+##  8 2020-01   -0.16                 NA              NA       NA        NA   
+##  9 2020-01  425.                   NA              NA       NA        NA   
+## 10 2020-01    0.31                 NA              NA       NA        NA   
+## # ℹ 695 more rows
+## # ℹ 86 more variables: FEDFUNDS_Mean &lt;dbl&gt;, PAL.LogAdj_Mean &lt;dbl&gt;,
+## #   SPY.LogAdj_Mean &lt;dbl&gt;, UAL.LogAdj_Mean &lt;dbl&gt;, VIX.Adjusted_Mean &lt;dbl&gt;,
+## #   VIX.LogAdj_Mean &lt;dbl&gt;, `BTC-USD.LogAdj_Median` &lt;dbl&gt;,
+## #   CPIAUCSL_Median &lt;dbl&gt;, DGS10_Median &lt;dbl&gt;, DGS2_Median &lt;dbl&gt;,
+## #   FEDFUNDS_Median &lt;dbl&gt;, PAL.LogAdj_Median &lt;dbl&gt;, SPY.LogAdj_Median &lt;dbl&gt;,
+## #   UAL.LogAdj_Median &lt;dbl&gt;, VIX.Adjusted_Median &lt;dbl&gt;, …</code></pre>
 <pre class="r"><code>print(get_summary_stats(master_df, target_cols, &quot;seasonal_quarter&quot;))</code></pre>
-<pre><code>## # A tibble: 4 × 73
-##   Period AAPL.Close_Mean `BTC-USD.Close_Mean` CPIAUCSL_Mean DGS10_Mean
-##   &lt;chr&gt;            &lt;dbl&gt;                &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;
-## 1 Q1                155.               44074.          290.       2.82
-## 2 Q2                153.               46678.          292.       2.94
-## 3 Q3                174.               46245.          295.       2.9 
-## 4 Q4                185.               51719.          298.       3.17
-## # ℹ 68 more variables: FEDFUNDS_Mean &lt;dbl&gt;, PSEI.PS.Close_Mean &lt;dbl&gt;,
-## #   SPY.Close_Mean &lt;dbl&gt;, VIX.Close_Mean &lt;dbl&gt;, AAPL.Close_Median &lt;dbl&gt;,
-## #   `BTC-USD.Close_Median` &lt;dbl&gt;, CPIAUCSL_Median &lt;dbl&gt;, DGS10_Median &lt;dbl&gt;,
-## #   FEDFUNDS_Median &lt;dbl&gt;, PSEI.PS.Close_Median &lt;dbl&gt;, SPY.Close_Median &lt;dbl&gt;,
-## #   VIX.Close_Median &lt;dbl&gt;, AAPL.Close_Variance &lt;dbl&gt;,
-## #   `BTC-USD.Close_Variance` &lt;dbl&gt;, CPIAUCSL_Variance &lt;dbl&gt;,
-## #   DGS10_Variance &lt;dbl&gt;, FEDFUNDS_Variance &lt;dbl&gt;, …</code></pre>
+<pre><code>## # A tibble: 39 × 92
+##    Period       Sum `BTC-USD.LogAdj_Mean` CPIAUCSL_Mean DGS10_Mean DGS2_Mean
+##    &lt;chr&gt;      &lt;dbl&gt;                 &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;     &lt;dbl&gt;
+##  1 Q1          1.52                     0           NA       NA        NA   
+##  2 Q1     157095.                      NA          290.      NA        NA   
+##  3 Q1       1526.                      NA           NA        2.82     NA   
+##  4 Q1       1414.                      NA           NA       NA         2.61
+##  5 Q1       1413.                      NA           NA       NA        NA   
+##  6 Q1         -0.17                    NA           NA       NA        NA   
+##  7 Q1         -0.07                    NA           NA       NA        NA   
+##  8 Q1         -0.72                    NA           NA       NA        NA   
+##  9 Q1      11869.                      NA           NA       NA        NA   
+## 10 Q2         -0.8                      0           NA       NA        NA   
+## # ℹ 29 more rows
+## # ℹ 86 more variables: FEDFUNDS_Mean &lt;dbl&gt;, PAL.LogAdj_Mean &lt;dbl&gt;,
+## #   SPY.LogAdj_Mean &lt;dbl&gt;, UAL.LogAdj_Mean &lt;dbl&gt;, VIX.Adjusted_Mean &lt;dbl&gt;,
+## #   VIX.LogAdj_Mean &lt;dbl&gt;, `BTC-USD.LogAdj_Median` &lt;dbl&gt;,
+## #   CPIAUCSL_Median &lt;dbl&gt;, DGS10_Median &lt;dbl&gt;, DGS2_Median &lt;dbl&gt;,
+## #   FEDFUNDS_Median &lt;dbl&gt;, PAL.LogAdj_Median &lt;dbl&gt;, SPY.LogAdj_Median &lt;dbl&gt;,
+## #   UAL.LogAdj_Median &lt;dbl&gt;, VIX.Adjusted_Median &lt;dbl&gt;, …</code></pre>
 <pre class="r"><code>print(get_summary_stats(master_df, target_cols, &quot;seasonal_month&quot;))</code></pre>
-<pre><code>## # A tibble: 12 × 73
-##    Period AAPL.Close_Mean `BTC-USD.Close_Mean` CPIAUCSL_Mean DGS10_Mean
-##    &lt;chr&gt;            &lt;dbl&gt;                &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;
-##  1 01                157.               41238.          289.       2.81
-##  2 02                159.               44025.          290.       2.85
-##  3 03                151.               46955.          291.       2.79
-##  4 04                150.               47842.          291.       2.89
-##  5 05                153.               47304.          292.       2.94
-##  6 06                158.               44868.          294.       2.97
-##  7 07                170.               45633.          294.       2.9 
-##  8 08                177.               47056.          295.       2.86
-##  9 09                177.               46040.          296.       2.96
-## 10 10                178.               49811.          297.       3.22
-## 11 11                184.               52384.          298.       3.21
-## 12 12                193                52984.          299.       3.1 
-## # ℹ 68 more variables: FEDFUNDS_Mean &lt;dbl&gt;, PSEI.PS.Close_Mean &lt;dbl&gt;,
-## #   SPY.Close_Mean &lt;dbl&gt;, VIX.Close_Mean &lt;dbl&gt;, AAPL.Close_Median &lt;dbl&gt;,
-## #   `BTC-USD.Close_Median` &lt;dbl&gt;, CPIAUCSL_Median &lt;dbl&gt;, DGS10_Median &lt;dbl&gt;,
-## #   FEDFUNDS_Median &lt;dbl&gt;, PSEI.PS.Close_Median &lt;dbl&gt;, SPY.Close_Median &lt;dbl&gt;,
-## #   VIX.Close_Median &lt;dbl&gt;, AAPL.Close_Variance &lt;dbl&gt;,
-## #   `BTC-USD.Close_Variance` &lt;dbl&gt;, CPIAUCSL_Variance &lt;dbl&gt;,
-## #   DGS10_Variance &lt;dbl&gt;, FEDFUNDS_Variance &lt;dbl&gt;, …</code></pre>
+<pre><code>## # A tibble: 119 × 92
+##    Period      Sum `BTC-USD.LogAdj_Mean` CPIAUCSL_Mean DGS10_Mean DGS2_Mean
+##    &lt;chr&gt;     &lt;dbl&gt;                 &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;     &lt;dbl&gt;
+##  1 01         0.64                     0           NA       NA        NA   
+##  2 01     53737.                      NA          289.      NA        NA   
+##  3 01       522.                      NA           NA        2.81     NA   
+##  4 01       479.                      NA           NA       NA         2.57
+##  5 01       487.                      NA           NA       NA        NA   
+##  6 01        -0.13                    NA           NA       NA        NA   
+##  7 01         0.04                    NA           NA       NA        NA   
+##  8 01         0.09                    NA           NA       NA        NA   
+##  9 01      3451.                      NA           NA       NA        NA   
+## 10 01         1.03                    NA           NA       NA        NA   
+## # ℹ 109 more rows
+## # ℹ 86 more variables: FEDFUNDS_Mean &lt;dbl&gt;, PAL.LogAdj_Mean &lt;dbl&gt;,
+## #   SPY.LogAdj_Mean &lt;dbl&gt;, UAL.LogAdj_Mean &lt;dbl&gt;, VIX.Adjusted_Mean &lt;dbl&gt;,
+## #   VIX.LogAdj_Mean &lt;dbl&gt;, `BTC-USD.LogAdj_Median` &lt;dbl&gt;,
+## #   CPIAUCSL_Median &lt;dbl&gt;, DGS10_Median &lt;dbl&gt;, DGS2_Median &lt;dbl&gt;,
+## #   FEDFUNDS_Median &lt;dbl&gt;, PAL.LogAdj_Median &lt;dbl&gt;, SPY.LogAdj_Median &lt;dbl&gt;,
+## #   UAL.LogAdj_Median &lt;dbl&gt;, VIX.Adjusted_Median &lt;dbl&gt;, …</code></pre>
+</div>
+<div id="financial-investigation" class="section level1" number="6">
+<h1><span class="header-section-number">6</span> Financial
+Investigation</h1>
+<p>In this section, we aim to model and investigate the relationship of
+these assets to the wide economy. The order of the analysis: Price
+Movement -&gt; Risk and Correlation -&gt; Macro Baseline.</p>
+<p>Each subsection is a wider lens that the previous and is meant from
+zooming in the economy in daily life to zooming out to the wider
+picture. Here, different sections ask fundamental questions:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Price Movement</strong> - ask a question of one one asset at
+a time.</li>
+<li><strong>Risk and Correlation</strong> - ask about the relationship
+between assets.</li>
+<li><strong>Macro Baseline</strong> - ask about the backdrop of all
+those assets.</li>
+</ol>
+<p>This is to bring a meaningful scope from the previous subsection. We
+can’t sensibly ask “how does UAL’s correlation with SPY behave under
+stress” before you’ve established what “return” even means for UAL
+iself; meanwhile, you can’t meaningfully frame “what regime are we in”
+until you’ve already seen regime-dependent behavior show up in the
+correlation data.</p>
+<p>This is also going by date frequency as price movement is all about
+fast-moving and granular data while the Macro Baseline is slowing-moving
+and very contextual.</p>
+<p>Moreover, for each subsection, we aim to analyze in a more structured
+manner and that is by:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Structure</strong> - what is the raw state
+(e.g. log-adjusted return assets) to be analyzed, what is the enriched
+state, how do we compress this further?</li>
+<li><strong>Dynamics</strong> - defines the transition of each state,
+viewing either as conservative or dissaptive system, and what context
+from the transitions can be grouped together?</li>
+<li><strong>Inference</strong> - gather evidence w/ statistics from
+inferred behavior, create the decision rule, and create a verdict from
+them.</li>
+<li><strong>Synthesis</strong> - from the three, and the two theoretical
+paradigms of each, conclude what can be said.</li>
+</ol>
+<p>Finally, for each we are going to use two theoretical paradigms to
+see how lenses view the market:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Neoclassical Economics (NCE)</strong> - Classic financial
+concepts that treats the financial system as a linear, rational,
+mechanical engine that naturally tends toward a stable equilibrium.</li>
+<li><strong>Complex Adaptive Systems (CAS)</strong> - It views markets
+not as sterile machines, but as biological ecosystems where feedback
+loops, friction, and shifting participant behavior constantly warp the
+environment out of equilibrium.</li>
+</ol>
+<p>Of course, we will state Objective, Code (SQL/dplyr), Output,
+Financial Interpretation.</p>
+</div>
+<div id="price-movement" class="section level1" number="7">
+<h1><span class="header-section-number">7</span> Price Movement</h1>
+<p>Here, we view how each asset moves in the economies they are in.</p>
+<div id="structure" class="section level2" number="7.1">
+<h2><span class="header-section-number">7.1</span> Structure</h2>
+<p><strong>NCE</strong>: These treat asset as a singular scalar, closing
+price or log return of it, assumed to be the object of interest.</p>
+<ol style="list-style-type: decimal">
+<li>Raw Input: Adjusted Closing Price on <code>UAL</code>,
+<code>PAL</code>, <code>BTC-USD</code>, and <code>SPY</code>.</li>
+<li>Enriched State: Log Return.</li>
+<li>Compression: Rolling Window of mean, variance, skewness, and
+kurtosis.</li>
+</ol>
+<p>Here, we are using Fama’s (1970) Efficient Market Hypothesis (EMH)
+which states that prices fully reflect all available information [2].
+Because information arrives as unpredictable, exogenous shocks, price
+updates are independent and identically distributed (<span class="math inline">\(i.i.d.\)</span>). This reduces the asset’s
+structural state to a trivial, memoryless coordinate point on a flat
+Euclidean space.</p>
+<p><strong>Objective</strong>:</p>
+<p><strong>Code</strong>:</p>
+<pre class="r"><code>price_structure_df &lt;- master_df %&gt;%
+    select(Date, UAL.LogAdj, PAL.LogAdj, `BTC-USD.LogAdj`, SPY.LogAdj) %&gt;%
+    mutate(
+    # UAL Rolling Moments
+    UAL_roll_mean = rollapplyr(UAL.LogAdj, 21, mean, fill = NA),
+    UAL_roll_var  = rollapplyr(UAL.LogAdj, 21, var, fill = NA),
+    UAL_roll_skew = rollapplyr(UAL.LogAdj, 21, skewness, fill = NA),
+    UAL_roll_kurt = rollapplyr(UAL.LogAdj, 21, kurtosis, fill = NA),
+    
+    # Repeat the identical rolling pattern for PAL
+    PAL_roll_mean = rollapplyr(PAL.LogAdj, 21, mean, fill = NA),
+    PAL_roll_var  = rollapplyr(PAL.LogAdj, 21, var, fill = NA),
+    PAL_roll_skew = rollapplyr(PAL.LogAdj, 21, skewness, fill = NA),
+    PAL_roll_kurt = rollapplyr(PAL.LogAdj, 21, kurtosis, fill = NA),
+    
+    # Repeat for BTC-USD
+    BTC_roll_mean = rollapplyr(`BTC-USD.LogAdj`, 21, mean, fill = NA),
+    BTC_roll_var  = rollapplyr(`BTC-USD.LogAdj`, 21, var, fill = NA),
+    BTC_roll_skew = rollapplyr(`BTC-USD.LogAdj`, 21, skewness, fill = NA),
+    BTC_roll_kurt = rollapplyr(`BTC-USD.LogAdj`, 21, kurtosis, fill = NA),
+    
+    # Repeat for SPY
+    SPY_roll_mean = rollapplyr(SPY.LogAdj, 21, mean, fill = NA),
+    SPY_roll_var  = rollapplyr(SPY.LogAdj, 21, var, fill = NA),
+    SPY_roll_skew = rollapplyr(SPY.LogAdj, 21, skewness, fill = NA),
+    SPY_roll_kurt = rollapplyr(SPY.LogAdj, 21, kurtosis, fill = NA)
+  ) %&gt;%
+  # Remove rows that don&#39;t have enough history for a full 21-day window
+  filter(!is.na(UAL_roll_mean))</code></pre>
+<p><strong>Output</strong>:</p>
+<p><strong>Financial Interpretation</strong>:</p>
+<p><strong>CAS</strong>: Treats the shape of the return distribution
+itself is the object of interest.</p>
+<ol style="list-style-type: decimal">
+<li>Raw Input: Adjusted Closing Price on <code>UAL</code>,
+<code>PAL</code>, <code>BTC-USD</code>, and <code>SPY</code>.</li>
+<li>Enriched State: Jet Bundle Lift of Low Return, with its Velocity,
+and Curvature.</li>
+<li>Compression: Rolling Window, of 21 days (Days in a month for
+financial trading), of its mean, variance, skewness, and kurtosis.</li>
+</ol>
+<p>This follows from Mandelbrot’s work [5], which states that financial
+returns are non-Gaussian and follow a stable Paretian distribution where
+variance is infinite or non-convergent over local windows. By lifting
+the returns into a Jet Bundle (position, velocity, curvature), the
+system recognizes that two assets sharing identical log returns can be
+on entirely different paths depending on their structural velocity
+(momentum) and curvature (volatility acceleration).</p>
+<p><strong>Objective</strong>:</p>
+<p><strong>Code</strong>:</p>
+<p><strong>Output</strong>:</p>
+<p><strong>Financial Interpretation</strong>:</p>
+</div>
+<div id="dynamics" class="section level2" number="7.2">
+<h2><span class="header-section-number">7.2</span> Dynamics</h2>
+<p><strong>NCE</strong>: Returns are draws from a fixed Gaussian, so
+risk scales predictably with thr square root of time.</p>
+<ol style="list-style-type: decimal">
+<li>Transition (Conservative): Modeled via Black-Scholes Diffusion where
+price evolution is a continuous random walk driven by standard Brownian
+motion (<span class="math inline">\(dW_t\)</span>).</li>
+<li>Grouped Context of Transitions: Portfolio risk across multiple time
+horizons (<span class="math inline">\(T\)</span>) aggregates linearly
+according to the standard square-root-of-time scaling rule: <span class="math inline">\(\sigma_T = \sigma_1 \times \sqrt{T}\)</span>. The
+temporal progression contains zero memory or feedback loops.</li>
+</ol>
+<p><strong>CAS</strong>: Variance scaling across horizons deviates from
+that straight line — evidence of memory, clustering, or regime
+persistence rather than pure noise.</p>
+<ol style="list-style-type: decimal">
+<li>Transition (Diffusion): Modeled as a continuous Flow on a Manifold
+splitting into a Symplectic core (conservative supply/demand matching)
+and Contact geometry (dissipative, thermodynamic features such as
+liquidation cascades and market-maker risk-premium bleed).</li>
+<li>Grouped Context of Transitions: Follows a multi-scale variance
+scaling rule: <span class="math inline">\(\text{Var}(r_{t+T}) \propto
+T^{2H}\)</span>, where the Hurst Exponent (<span class="math inline">\(H
+\neq 0.5\)</span>) captures temporal memory. Transitions group into
+persistent regimes where high-volatility events cluster endogenously
+(Mandelbrot 1963).</li>
+</ol>
+</div>
+<div id="inference" class="section level2" number="7.3">
+<h2><span class="header-section-number">7.3</span> Inference</h2>
+<p><strong>NCE</strong>: Checks if short-horizon volatility is
+sufficient to price any longer-horizon risk.</p>
+<ol style="list-style-type: decimal">
+<li>Gathering Evidence: Goodness of Fit test (Jarque-Bera) for
+normality, and the Lo-MacKinlay Variance Ratio Test (<span class="math inline">\(VR(k)\)</span>) to evaluate variance scaling
+across multiple horizons (<span class="math inline">\(k\)</span>).</li>
+<li>Decision Rule:
+<ul>
+<li><strong>IF</strong> Jarque-Bera fails to reject the null hypothesis
+of normality (<span class="math inline">\(p &gt; 0.05\)</span>)
+<strong>AND</strong> <span class="math inline">\(VR(k) \approx
+1\)</span> across all designated horizons (<span class="math inline">\(k\)</span>):
+<ul>
+<li>Then we accept the NCE framework. Daily volatility is sufficient to
+price longer-horizon risk, confirming a flat, memoryless Euclidean price
+space.</li>
+</ul></li>
+<li><strong>IF</strong> Jarque-Bera rejects normality (<span class="math inline">\(p \le 0.05\)</span>) <strong>OR</strong> <span class="math inline">\(VR(k)\)</span> significantly drifts away from
+<span class="math inline">\(1\)</span> as <span class="math inline">\(k\)</span> increases:
+<ul>
+<li>Then the NCE assumption fails. Short-horizon volatility calculations
+systematically misprice or understate long-horizon structural risk.</li>
+</ul></li>
+</ul></li>
+<li>Verdict: <code>TBD</code></li>
+</ol>
+<p><strong>CAS</strong>: Check if that the tail risk is systematically
+underpriced by that approach, because rare, large moves happen more
+often than a Gaussian model would predict.</p>
+<ol style="list-style-type: decimal">
+<li>Evidence:</li>
+</ol>
+<ul>
+<li>Hurst Exponent (<span class="math inline">\(H\)</span>) via Rescaled
+Range Analysis to evaluate long-range dependency and clustering (<span class="math inline">\(H \neq 0.5\)</span>).</li>
+<li>Hill’s Estimator for Tail Index (<span class="math inline">\(\alpha\)</span>) to compute the power-law decay
+exponent of the return distribution’s extreme tails.</li>
+</ul>
+<ol start="2" style="list-style-type: decimal">
+<li>Decision Rule:
+<ul>
+<li><strong>IF</strong> the estimated Hurst exponent deviates
+significantly from equilibrium (<span class="math inline">\(H &gt;
+0.5\)</span> for persistence or <span class="math inline">\(H &lt;
+0.5\)</span> for anti-persistence) <strong>AND</strong> Hill’s tail
+index indicates heavy tails (<span class="math inline">\(\alpha &lt;
+3\)</span>, where variance or kurtosis begins to fail standard
+convergence limits):
+<ul>
+<li>Then we validate the CAS paradigm. The asset demonstrates structural
+memory and fat tails, proving that return distributions cannot be
+compressed into a memoryless scalar without ignoring catastrophic
+systemic tail risk.</li>
+</ul></li>
+<li><strong>IF</strong> <span class="math inline">\(H \approx
+0.5\)</span> <strong>AND</strong> <span class="math inline">\(\alpha \ge
+3\)</span> (approaching Gaussian tail decay thresholds):
+<ul>
+<li>Then the asset behaves like a standard equilibrium system.
+Deviations are transient noise, and the traditional random walk
+approximation remains robust.</li>
+</ul></li>
+</ul></li>
+<li>Verdict: <code>TBD</code></li>
+</ol>
+</div>
+<div id="synthesis" class="section level2" number="7.4">
+<h2><span class="header-section-number">7.4</span> Synthesis</h2>
+<p>The Price Movement analysis serves as our most granular lens,
+examining individual asset vectors in isolation. If the empirical
+verdicts yield deviations from normality and square-root scaling, it
+proves that “price” is not a simple, self-contained coordinate point.
+Instead, assets contain intrinsic path dependency and memory, prompting
+us to step outward into our next lens: how these unique asset states
+interact with one another under varying regimes.</p>
+</div>
+</div>
+<div id="risk-and-correlation" class="section level1" number="8">
+<h1><span class="header-section-number">8</span> Risk and
+Correlation</h1>
+<p>Here, we view how the relationships of the assets moves in the
+economies they are in.</p>
+<div id="structure-1" class="section level2" number="8.1">
+<h2><span class="header-section-number">8.1</span> Structure</h2>
+<p><strong>NCE</strong>: Single, time-invariant covariance matrix — one
+number per asset pair, good for all seasons.</p>
+<ol style="list-style-type: decimal">
+<li>Raw Input: Co-moving daily log returns matrix for UAL, PAL, BTC-USD,
+and SPY.</li>
+<li>Enriched State: A static sample covariance matrix (<span class="math inline">\(\Sigma\)</span>) calculated across the entire
+dataset.</li>
+<li>Compression: A single cross-asset correlation scalar (<span class="math inline">\(\rho_{i,j}\)</span>) per asset pair.</li>
+</ol>
+<p>Here, we utilize Markowitz’s Modern Portfolio Theory (MPT) and the
+foundations of Sharpe’s Capital Asset Pricing Model (CAPM). Under this
+architecture, the asset space is a static Euclidean vector space where
+asset relationships are treated as fixed, linear geometries. Risk is
+fully quantified by the variance-covariance matrix (<span class="math inline">\(\Sigma\)</span>), assuming structural errors or
+shifts are merely random, zero-mean Gaussian noise around a permanent
+equilibrium.</p>
+<p><strong>CAS</strong>: CAS’s state is that same matrix conditioned on
+regime — a High-VIX matrix and a Low-VIX matrix, treated as genuinely
+different objects, not noise around one “true” matrix.</p>
+<ol style="list-style-type: decimal">
+<li>Raw Input: Daily log returns matrix for UAL, PAL, BTC-USD, SPY, and
+the daily conditioning regime marker VIX.</li>
+<li>Enriched State: Conditional, rolling covariance matrices <span class="math inline">\(\Sigma_t \vert{} \text{VIX}_t\)</span>, explicitly
+split into separate geometric charts.</li>
+<li>Compression: Partitioned states mapped into distinct manifolds:
+Low-VIX Chart (<span class="math inline">\(\text{VIX} \le 25\text{th
+percentile}\)</span>) and High-VIX Chart (<span class="math inline">\(\text{VIX} \ge 75\text{th
+percentile}\)</span>).</li>
+</ol>
+<p>This builds on Bouchaud’s Law of Endogenous Correlation Breakdown,
+which proves that cross-asset dependencies are non-stationary,
+state-dependent, and governed by systemic feedback loops. Rather than
+viewing correlation shifts as statistical noise, the system recognizes
+them as distinct geometric structures. High-volatility matrices
+represent entirely separate topological charts on the market manifold
+that cannot be smoothly mapped using a single, global Euclidean
+average.</p>
+</div>
+<div id="dynamics-1" class="section level2" number="8.2">
+<h2><span class="header-section-number">8.2</span> Dynamics</h2>
+<p><strong>NCE</strong>: Assumes correlations are stationary — the
+relationship between UAL and SPY today is the same relationship in a
+crash.</p>
+<ol style="list-style-type: decimal">
+<li>Transition (Conservative): Portfolio variance transitions over time
+via a deterministic, linear law: <span class="math inline">\(\sigma^2_p
+= w^T \Sigma w\)</span>. The weights <span class="math inline">\(w\)</span> change, but the inner product structure
+governed by <span class="math inline">\(\Sigma\)</span> is treated as a
+conservation law.</li>
+<li>Grouped Context of Transitions: Multi-asset cross-dynamics are
+modeled as permanently coupled geometric Brownian motions. Co-movements
+scale symmetrically across all economic cycles, treating structural
+changes as impossible.</li>
+</ol>
+<p><strong>CAS</strong>: Correlations are regime-dependent and tend to
+converge upward precisely during stress (diversification “disappears”
+when you need it most).</p>
+<ol style="list-style-type: decimal">
+<li>Transition (Diffusion): Systemic risk behaves like a thermodynamic
+fluid following Contact Geometry / Non-equilibrium Dissipation. In calm
+regimes, the flow is Symplectic (information-conserving, asset pairs
+preserve their unique orthogonal vectors). When a threshold is crossed
+(e.g., a high-VIX shock), margin calls and liquidations force a massive
+energy transfer (entropy bleed).</li>
+<li>Grouped Context of Transitions: Asset transitions are grouped into
+distinct market volatility regimes. Under high-volatility environments
+(conditioned by a high <code>VIX</code> threshold), individual asset
+behaviors lose their unique degrees of freedom, and correlations across
+completely different asset classes (e.g., <code>UAL</code>,
+<code>PAL</code>, and <code>BTC-USD</code>) shift simultaneously.</li>
+</ol>
+</div>
+<div id="inference-1" class="section level2" number="8.3">
+<h2><span class="header-section-number">8.3</span> Inference</h2>
+<p><strong>NCE</strong>: The Neoclassical paradigm infers that because
+asset relations are governed by a stationary covariance matrix, a
+diversified portfolio’s risk reduction remains stable and can be
+reliably trusted for long-term strategic allocation and value-at-risk
+(VaR) planning.</p>
+<ol style="list-style-type: decimal">
+<li>Gathering Evidence: Rolling Correlation Homogeneity Test (such as
+Jennrich’s test for covariance matrix equality or a rolling distance
+evaluation) comparing the structural covariance matrix of a Low-VIX
+sub-sample against a High-VIX sub-sample (<span class="math inline">\(H_0: \Sigma_{\text{Low}} =
+\Sigma_{\text{High}}\)</span>).</li>
+<li>Decision Rule:
+<ul>
+<li><strong>IF</strong> the test fails to reject the null hypothesis of
+covariance homogeneity (<span class="math inline">\(p &gt;
+0.05\)</span>):
+<ul>
+<li>Then NCE is verified. The asset covariance structure is stationary
+over time, and a single historical covariance matrix is sufficient to
+build dependable, permanently diversified portfolios.</li>
+</ul></li>
+<li><strong>IF</strong> the test strongly rejects covariance homogeneity
+(<span class="math inline">\(p \le 0.05\)</span>):
+<ul>
+<li>Then the NCE assumption of a stable portfolio shield is broken.
+Covariance is non-stationary, meaning that a single time-invariant
+matrix will severely miscalculate risk during shifts in
+environment.</li>
+</ul></li>
+</ul></li>
+<li>Verdict: <code>TBD</code></li>
+</ol>
+<p><strong>CAS</strong>: The Complex Adaptive Systems paradigm infers
+that because joint asset transitions are governed by regime-dependent
+contact geometry, a portfolio’s effective diversification benefit will
+systematically shrink exactly during the deep market drawdowns an
+investor cares about avoiding.</p>
+<ol style="list-style-type: decimal">
+<li>Gathering Evidence: Asymmetric Correlation Co-Movement Test
+measuring the mean difference in cross-asset correlations (<span class="math inline">\(\Delta \rho_{i,j}\)</span>) and the distance
+(Frobenius Norm) between <span class="math inline">\(\Sigma_{\text{Low}}\)</span> and <span class="math inline">\(\Sigma_{\text{High}}\)</span> during distinct
+<code>VIX</code> regimes.</li>
+<li>Decision Rule:
+<ul>
+<li><strong>IF</strong> the distance metric between the matrices is
+statistically significant <strong>AND</strong> the average cross-asset
+correlation coefficient increases dramatically in the High-VIX matrix
+(<span class="math inline">\(\bar{\rho}_{\text{High}} &gt;
+\bar{\rho}_{\text{Low}}\)</span>):
+<ul>
+<li>Then the CAS paradigm is validated. Cross-asset dependencies are
+endogenously regime-dependent, meaning that traditional asset
+diversification systematically breaks down and disappears precisely when
+market stress peaks.</li>
+</ul></li>
+<li><strong>IF</strong> the distance metric is negligible
+<strong>OR</strong> correlations stay stable/decrease during
+high-volatility spikes:
+<ul>
+<li>Then the asset ecosystem follows a simpler linear geometry.
+Correlation shifts are temporary statistical artifacts rather than
+systemic phase changes.</li>
+</ul></li>
+</ul></li>
+<li>Verdict: <code>TBD</code></li>
+</ol>
+</div>
+<div id="synthesis-1" class="section level2" number="8.4">
+<h2><span class="header-section-number">8.4</span> Synthesis</h2>
+<p>By widening our lens from isolated prices to joint relationships, we
+can test whether cross-asset correlations behave like fixed, immutable
+laws (NCE) or dynamic structures that warp based on market stress (CAS).
+If the tests show that correlations converge toward <span class="math inline">\(1\)</span> during high-VIX environments, it proves
+that diversification is highly unstable. This motivates our final
+zoom-out: examining the underlying macroeconomic yield curve that
+anchors these assets.</p>
+</div>
+</div>
+<div id="macro-baseline" class="section level1" number="9">
+<h1><span class="header-section-number">9</span> Macro Baseline</h1>
+<p>Here, we view the entire context of the market and economy.</p>
+<div id="structure-2" class="section level2" number="9.1">
+<h2><span class="header-section-number">9.1</span> Structure</h2>
+<p><strong>NCE</strong>: via CAPM, collapses the entire term structure
+into one risk-free rate — a single number standing in for “the cost of
+money.”</p>
+<ol style="list-style-type: decimal">
+<li>Raw Input: Daily DGS10, DGS2, or monthly FEDFUNDS.</li>
+<li>Enriched State: A single risk-free scalar (<span class="math inline">\(r_f\)</span>) selected based on the closest
+maturity to the asset’s cash flows (e.g., using DGS2 for a 2-year
+horizon contract).</li>
+<li>Compression: The chosen flat scalar applied as a uniform baseline
+denominator in linear valuation equations.</li>
+</ol>
+<p><strong>CAS</strong>: via the Level/Slope/Curve Decomposition, treats
+the yield curve as a small multi-dimensional object, where the short end
+and long end can move independently.</p>
+<ol style="list-style-type: decimal">
+<li>Raw Input: Co-moving rates across the term spectrum (FEDFUNDS, DGS2,
+and DGS10) matched with macroeconomic inflation context (CPIAUCSL).</li>
+<li>Enriched State: A 3-dimensional coordinate state vector mapping the
+classical Litterman-Scheinkman yield curve factors directly:</li>
+</ol>
+<ul>
+<li><span class="math inline">\(\text{Level}_t = \frac{\text{FEDFUNDS}_t
++ \text{DGS2}_t + \text{DGS10}_t}{3}\)</span> (Overall altitude of
+interest rates)</li>
+<li><span class="math inline">\(\text{Slope}_t = \text{DGS10}_t -
+\text{FEDFUNDS}_t\)</span> (The long-to-short macro spread)</li>
+<li><span class="math inline">\(\text{Curvature}_t = (\text{DGS10}_t -
+\text{DGS2}_t) - (\text{DGS2}_t - \text{FEDFUNDS}_t) = \text{DGS10}_t -
+2\cdot\text{DGS2}_t + \text{FEDFUNDS}_t\)</span> (The structural
+bend/twist of the medium-term belly relative to the anchors)</li>
+</ul>
+<ol start="3" style="list-style-type: decimal">
+<li>Compression: Projecting this 3D coordinate <span class="math inline">\([L_t, S_t, C_t]\)</span> onto distinct, discrete
+macro-regime charts (e.g., Bear Flattener, Bull Steeper, or Inverted
+Belly).</li>
+</ol>
+<p>This directly invokes the Litterman-Scheinkman 3-Factor Principal
+Component Law, which states that over 95% of all term structure
+variations are completely captured by these three orthogonal geometric
+transformations (Level, Slope, and Curvature).</p>
+</div>
+<div id="dynamics-2" class="section level2" number="9.2">
+<h2><span class="header-section-number">9.2</span> Dynamics</h2>
+<p><strong>NCE</strong>: Assumes shifts in “the” rate are parallel and
+exogenous — everything moves together.</p>
+<ol style="list-style-type: decimal">
+<li>Transition (Conservative): The curve transitions uniformly.
+Short-rate models treat the entire curve as a single string pulled by a
+central mean-reverting anchor.</li>
+<li>Grouped Context of Transitions: Macroeconomic adjustments are
+uniform. A shift in central bank policy alters the short-term rate, and
+that change transfers linearly up the maturity spectrum, maintaining
+rigid, parallel tracking across <code>FEDFUNDS</code>,
+<code>DGS2</code>, and <code>DGS10</code>.</li>
+</ol>
+<p><strong>CAS</strong>: Allows the curve to twist (short end rising
+while the long end holds, or vice versa) which a single-number model
+can’t represent at all.</p>
+<ol style="list-style-type: decimal">
+<li>Transition (Diffusion): The curve moves via continuous Non-Parallel
+Transport and Curvature Shifts. For example, during an aggressive
+central bank tightening cycle, FEDFUNDS shoots up, DGS2 spikes violently
+due to medium-term policy stress, while DGS10 lags behind due to
+long-term economic deceleration.</li>
+<li>Grouped Transitions: Systemic rate movements are grouped by their
+geometric deformations (Litterman &amp; Scheinkman 1991). Changes are
+path-dependent, where shifts in the curve’s Slope or Curvature act as
+macroeconomic filters that alter the valuation dynamics of specific
+assets (e.g., separating capital between pure liquidity proxies like
+<code>BTC-USD</code> and debt-laden operational equities like
+<code>UAL</code>).</li>
+</ol>
+</div>
+<div id="inference-2" class="section level2" number="9.3">
+<h2><span class="header-section-number">9.3</span> Inference</h2>
+<p><strong>NCE</strong>: Checks if a single discount rate is adequate
+for valuing any asset.</p>
+<ol style="list-style-type: decimal">
+<li>Evidence: Multivariate Cointegration and Parallelism Test running a
+Johansen cointegration test across the interest rate vector <span class="math inline">\([\text{FEDFUNDS}, \text{DGS2},
+\text{DGS10}]\)</span> to verify if the spatial distance between
+maturities remains strictly locked in a parallel, stationary equilibrium
+over time (<span class="math inline">\(H_0: \Delta\text{Slope} = 0
+\text{ and } \Delta\text{Curvature} = 0\)</span>).</li>
+<li>Decision Rule:
+<ul>
+<li><strong>IF</strong> the rates are cointegrated with stationary
+spreads <strong>AND</strong> the changes in Slope and Curvature
+coordinates do not deviate significantly from zero over time:
+<ul>
+<li>Then NCE discounting is vindicated. The term structure can be safely
+compressed into a single baseline number representing the global cost of
+capital without losing valuation accuracy.</li>
+</ul></li>
+<li><strong>IF</strong> the cointegration relationships fail
+<strong>OR</strong> the spreads display structural non-stationarity and
+frequent non-parallel shifts:
+<ul>
+<li>Then the NCE single-scalar model introduces systemic mispricing. A
+single interest rate variable cannot accurately capture the
+multi-dimensional macro risk backdrop.</li>
+</ul></li>
+</ul></li>
+<li>Verdict: <code>TBD</code></li>
+</ol>
+<p><strong>CAS</strong>: Checks if a firm’s or asset’s rate sensitivity
+depends on which part of the curve it’s exposed to (e.g., BTC-USD’s rate
+sensitivity behaves differently than UAL’s, which carries real
+duration-like debt exposure).</p>
+<ol style="list-style-type: decimal">
+<li>Evidence: 3-Factor Regression Elasticity Test running rolling
+multivariate linear regressions of asset log returns against the
+individual, orthogonal coordinates of <span class="math inline">\(\text{Level}_t\)</span>, <span class="math inline">\(\text{Slope}_t\)</span>, and <span class="math inline">\(\text{Curvature}_t\)</span> under varying
+inflation (<code>CPIAUCSL</code>) backdrops.</li>
+<li>Decision Rule:
+<ul>
+<li><strong>IF</strong> individual assets display highly asymmetrical,
+statistically significant elasticities to specific factors (e.g.,
+<code>BTC-USD</code> reacting intensely to short-end
+<code>FEDFUNDS</code>/<code>DGS2</code> liquidity transformations, while
+<code>UAL</code> is tied strictly to long-end <code>DGS10</code> Slope
+developments):
+<ul>
+<li>Then the CAS multi-factor view is fully validated. The macro
+environment is a multi-dimensional geometry where curve deformations
+(like a steep 2-year inversion) cause localized, non-linear shifts in
+risk and value across different asset ecosystems.</li>
+</ul></li>
+<li><strong>IF</strong> all asset sensitivities are uniform across
+Level, Slope, and Curvature variables, or if multi-factor sensitivities
+lack statistical significance:
+<ul>
+<li>Then the macro environment behaves symmetrically, and separating the
+term structure into sub-components adds no predictive value.</li>
+</ul></li>
+</ul></li>
+<li>Verdict: <code>TBD</code></li>
+</ol>
+</div>
+<div id="synthesis-2" class="section level2" number="9.4">
+<h2><span class="header-section-number">9.4</span> Synthesis</h2>
+<p>The Macro Baseline represents our widest analytical lens, mapping the
+foundational environment that underpins all asset classes. By evaluating
+Level, Slope, and Curvature factors alongside inflation, we can infer
+whether the macroeconomy behaves as a flat baseline cost of capital
+(NCE) or a dynamic multi-dimensional field (CAS). If the data reveals
+non-parallel twists and highly localized asset sensitivities, it
+confirms that macro risk is highly structural and dependent on curve
+geometry.</p>
+</div>
+</div>
+<div id="conclusion" class="section level1" number="10">
+<h1><span class="header-section-number">10</span> Conclusion</h1>
+</div>
+<div id="references" class="section level1" number="11">
+<h1><span class="header-section-number">11</span> References:</h1>
+<ul>
+<li>[1] Bouchaud, J. P., Farmer, J. D., &amp; Lillo, F. (2009). “How
+Markets Slowly Digest Large Trading Orders.” Handbook of Financial
+Markets: Dynamics and Evolution, 57–160.</li>
+<li>[2] Fama, E. F. (1970). “Efficient Capital Markets: A Review of
+Theory and Empirical Work.” The Journal of Finance, 25(2), 383–417.</li>
+<li>[3] Grinold, R. C. (1989). “The Fundamental Law of Active
+Management.” The Journal of Portfolio Management, 15(3), 30–38.</li>
+<li>[4] Litterman, R., &amp; Scheinkman, J. (1991). “Common Factors
+Affecting Bond Returns.” The Journal of Fixed Income, 1(1), 54–61.</li>
+<li>[5] Mandelbrot, B. (1963). “The Variation of Certain Speculative
+Prices.” The Journal of Business, 36(4), 394–419.</li>
+<li>[6] Markowitz, H. (1952). “Portfolio Selection.” The Journal of
+Finance, 7(1), 77–91.</li>
+<li>[7] Sharpe, W. F. (1964). “Capital Asset Prices: A Theory of Market
+Equilibrium under Conditions of Risk.” The Journal of Finance, 19(3),
+425–442.</li>
+<li>[8] jetbundle. (2026). the black book of quantitative finance. <a href="https://www.youtube.com/watch?v=AKIkhuR7HYY" class="uri">https://www.youtube.com/watch?v=AKIkhuR7HYY</a></li>
+<li>[9] jetbundle. (2026). 6 laws behind modern quantitative finance. <a href="https://www.youtube.com/watch?v=cvL_uWtMTAo" class="uri">https://www.youtube.com/watch?v=cvL_uWtMTAo</a></li>
+</ul>
 </div>
 
 
