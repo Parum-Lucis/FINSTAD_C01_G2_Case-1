@@ -173,47 +173,39 @@ compressed_cas_df <- jet_bundle_df %>%
   # Drop early dates that do not possess a full 21-day historical window
   filter(!is.na(UAL_pos_mean))
 
+list_cas <- c('UAL_pos_mean', 'UAL_pos_var', 'UAL_pos_skew', 
+              'UAL_vel_mean', 'UAL_vel_var', 'UAL_vel_skew', 
+              'UAL_cur_mean', 'UAL_cur_var', 'UAL_cur_skew')
+
 # 1. Pivot all metrics into a long format together
 cas_plot_long <- compressed_cas_df %>%
   select(Date, all_of(list_cas)) %>%
-  pivot_longer(
-    cols = -Date,
-    names_to = "Full_Metric",
-    values_to = "Value"
-  ) %>%
-  # Break out the metadata to create smart facet labels
+  pivot_longer(cols = -Date, names_to = "Full_Metric", values_to = "Value") %>%
   mutate(
     Space = case_when(
-      str_detect(Full_Metric, "_pos_") ~ "Position Space (Yield Baseline)",
-      str_detect(Full_Metric, "_vel_") ~ "Velocity Space (Momentum/Flow)",
-      str_detect(Full_Metric, "_cur_") ~ "Curvature Space (Volatility Acceleration)"
+      str_detect(Full_Metric, "_pos_") ~ "Position Space (Returns)",
+      str_detect(Full_Metric, "_vel_") ~ "Velocity Space (Momentum)",
+      str_detect(Full_Metric, "_cur_") ~ "Curvature Space (Acceleration)"
     ),
     Stat = case_when(
-      str_detect(Full_Metric, "_mean$") ~ "21d Rolling Mean",
-      str_detect(Full_Metric, "_var$") ~ "21d Rolling Variance",
-      str_detect(Full_Metric, "_skew$") ~ "21d Rolling Skewness"
+      str_detect(Full_Metric, "_mean$") ~ "21d Mean",
+      str_detect(Full_Metric, "_var$") ~ "21d Variance",
+      str_detect(Full_Metric, "_skew$") ~ "21d Skewness"
     )
   )
 
-# 2. Loop through each Space tier to create 3 consolidated interactive summaries
+price_structure_plot <- list()
+
+# Explicitly print inside the loop using results='asis' chunk settings
 for (current_space in unique(cas_plot_long$Space)) {
-  
   space_data <- cas_plot_long %>% filter(Space == current_space)
-  
-  p_space <- ggplot(space_data, aes(x = Date, y = Value, color = Stat)) +
+  p <- ggplot(space_data, aes(x = Date, y = Value, color = Stat)) +
     geom_line(alpha = 0.7) +
     facet_wrap(~Stat, scales = "free_y", ncol = 1) +
-    theme_minimal() +
-    labs(
-      title = paste("CAS Structural State Space:", current_space),
-      x = "Date",
-      y = "Value"
-    ) +
-    theme(legend.position = "none")
-  
-  # Explicitly print the interactive widget inside the loop
-  print(ggplotly(p_space))
+    theme_minimal() + labs(title = current_space)
+  price_structure_plot[[current_space]]<-ggplotly(p)
 }
+tagList(price_structure_plot)
 ```
 
 
@@ -226,6 +218,27 @@ for (current_space in unique(cas_plot_long$Space)) {
  
  
 ```{r rolling-dynamic-plot}
+price_dynamics_df <- master_df %>%
+  select(Date, UAL.LogAdj, PAL.LogAdj, `BTC-USD.LogAdj`, SPY.LogAdj) %>%
+  
+  # Mutate to build longer-horizon compound paths (Rolling sums of daily log returns)
+  mutate(
+    # UAL Multi-horizon paths
+    UAL_5d_return  = rollapplyr(UAL.LogAdj, 5, sum, fill = NA),
+    UAL_21d_return = rollapplyr(UAL.LogAdj, 21, sum, fill = NA),
+    
+    # PAL Multi-horizon paths
+    PAL_5d_return  = rollapplyr(PAL.LogAdj, 5, sum, fill = NA),
+    PAL_21d_return = rollapplyr(PAL.LogAdj, 21, sum, fill = NA),
+    
+    # BTC Multi-horizon paths
+    BTC_5d_return  = rollapplyr(`BTC-USD.LogAdj`, 5, sum, fill = NA),
+    BTC_21d_return = rollapplyr(`BTC-USD.LogAdj`, 21, sum, fill = NA),
+    
+    # SPY Multi-horizon paths
+    SPY_5d_return  = rollapplyr(SPY.LogAdj, 5, sum, fill = NA),
+    SPY_21d_return = rollapplyr(SPY.LogAdj, 21, sum, fill = NA)
+  )
 # --- DYNAMICS STEP ---
 # 1. Compute empirical variance for each horizon (uncorrected by T)
 empirical_summary <- price_dynamics_df %>%
@@ -359,6 +372,7 @@ cas_scaling_df <- cas_empirical %>%
       Framework_Type == "NCE_Theoretical_Variance" ~ "NCE Benchmark (Linear Scaling)"
     )
   )
+plotly_plots <- list()
 
 # --- PLOT CAS DYNAMICS SEPARATELY BY SPACE TIER ---
 for (current_space in unique(cas_scaling_df$Space_Label)) {
@@ -377,11 +391,29 @@ for (current_space in unique(cas_scaling_df$Space_Label)) {
       fill = "Model Hypothesis"
     )
   
-  print(ggplotly(p_cas_dynamics))
+  plotly_plots[[current_space]] <- ggplotly(p_cas_dynamics)
 }
+tagList(plotly_plots)
 ```
 
 ```{r}
+
+cas_true_dynamics_df <- cas_scaling_df %>%
+  # Filter to look at unique empirical horizons to calculate H
+  filter(Framework_Type == "Empirical (Actual CAS Dynamics)") %>%
+  group_by(Space_Label) %>%
+  mutate(
+    # Estimate 2H via a local log-linear regression slope: ln(Var) vs ln(T)
+    # Since Var = C * T^(2H) -> log(Var) = log(C) + 2H*log(T)
+    log_T = log(T_days),
+    log_Var = log(VarianceValue),
+    
+    # Extract the slope (2H) using basic linear algebra syntax
+    two_H = cov(log_Var, log_T) / var(log_T),
+    Hurst_Est = two_H / 2
+  ) %>%
+  ungroup()
+
 # 1. Isolate the base 1-Day empirical variance for each Space tier to prevent recycling errors
 base_variance_map <- cas_scaling_df %>%
   filter(Framework_Type == "Empirical (Actual CAS Dynamics)", Horizon == "1d") %>%
@@ -416,6 +448,8 @@ plotting_matrix_df <- bind_rows(cas_scaling_df, cas_lines_df) %>%
   fill(Hurst_Est, Space_Label, .direction = "updown") %>%
   ungroup()
 
+plotly_plots_2 <- list()
+
 # --- PLOT THE THREE-WAY PARADIGM COMPARISON ---
 for (current_space in unique(plotting_matrix_df$Space_Label)) {
   
@@ -434,8 +468,75 @@ for (current_space in unique(plotting_matrix_df$Space_Label)) {
       fill = "Model Class"
     )
   
-  print(ggplotly(p_cas_true))
+  plotly_plots_2[[current_space]] <- ggplotly(p_cas_true)
 }
+
+tagList(plotly_plots_2)
+```
+
+```{r}
+# 1. Isolate clean continuous log returns for your target asset (e.g., PAL)
+returns_vector <- master_df %>%
+  filter(!is.na(PAL.LogAdj)) %>%
+  pull(PAL.LogAdj)
+
+# 2. Compute a complete continuous spectrum of empirical variances across horizons 1 to 21
+horizons <- 1:21
+continuous_empirical_var <- sapply(horizons, function(k) {
+  k_day_returns <- rollapplyr(returns_vector, k, sum, fill = NA)
+  var(k_day_returns, na.rm = TRUE)
+})
+
+# 3. Extract base 1-day variance baseline unit
+base_var <- continuous_empirical_var[1]
+
+# 4. Programmatically estimate the exact Hurst Exponent (H) via log-linear fit
+log_T <- log(horizons)
+log_Var <- log(continuous_empirical_var)
+fit_hurst <- lm(log_Var ~ log_T)
+estimated_H <- as.numeric(coef(fit_hurst)[2] / 2)
+
+# 5. Build the complete geometric coordinate dataset mapping the three trajectories
+dynamics_manifold_df <- tibble(
+  Horizon_T = horizons,
+  Empirical_Path = continuous_empirical_var,
+  NCE_Linear_Path = base_var * horizons,                     # Var(T) = sigma^2 * T
+  CAS_Fractal_Path = base_var * (horizons^(2 * estimated_H)) # Var(T) = sigma^2 * T^(2H)
+) %>%
+  # Pivot into long format for line geom mapping
+  pivot_longer(
+    cols = -Horizon_T,
+    names_to = "Paradigm_Layer",
+    values_to = "Total_Variance"
+  ) %>%
+  mutate(
+    Paradigm_Layer = case_when(
+      Paradigm_Layer == "Empirical_Path"   ~ "Actual Empirical Path (Market Data)",
+      Paradigm_Layer == "NCE_Linear_Path"  ~ "NCE / Black-Scholes Path (Linear)",
+      Paradigm_Layer == "CAS_Fractal_Path" ~ paste0("CAS Fractal Curve (Hurst H = ", round(estimated_H, 3), ")")
+    )
+  )
+
+# 6. Generate the Geometric Line Plot
+p_dynamics_curves <- ggplot(dynamics_manifold_df, 
+                            aes(x = Horizon_T, y = Total_Variance, color = Paradigm_Layer, linetype = Paradigm_Layer)) +
+  geom_line(size = 1.2, alpha = 0.9) +
+  geom_point(size = 2, alpha = 0.6) +
+  scale_color_manual(values = c("darkblue", "darkorange", "red")) +
+  scale_linetype_manual(values = c("solid", "dashed", "dotted")) +
+  theme_minimal() +
+  labs(
+    title = "PAL Dynamics Manifold: Multi-Scale Variance Scaling Curves",
+    subtitle = "Visualizing the geometric path difference between memoryless diffusion and complex systems",
+    x = "Time Horizon Scaling (Days, T)",
+    y = "Total Aggregated Return Variance",
+    color = "Theoretical Framework",
+    linetype = "Theoretical Framework"
+  ) +
+  theme(legend.position = "bottom")
+
+# Render interactively for your integrated HTML report
+ggplotly(p_dynamics_curves)
 ```
 
 ## Inference
@@ -475,11 +576,11 @@ hurst_val <- pracma::hurstexp(daily_returns, display = FALSE)$Hs
 # tail_index <- custom_hill_estimator(daily_returns) 
 
 # 4. Print Outputs to clear the TBD fields
-cat("--- INFERENCE REPORT FOR:", target_asset, "---\n")
-cat("Jarque-Bera p-value: ", p_val_jb, "\n")
-cat("Variance Ratio (5-Day Target = 1): ", vr_5d, "\n")
-cat("Variance Ratio (21-Day Target = 1): ", vr_21d, "\n")
-cat("Hurst Exponent (Target = 0.5): ", hurst_val, "\n")
+cat("--- INFERENCE REPORT FOR:", target_asset, "---\n",
+    "Jarque-Bera p-value: ", p_val_jb, "\n",
+    "Variance Ratio (5-Day Target = 1): ", vr_5d, "\n",
+    "Variance Ratio (21-Day Target = 1): ", vr_21d, "\n",
+    "Hurst Exponent (Target = 0.5): ", hurst_val, "\n")
 ```
 
 
@@ -539,13 +640,13 @@ tail_shocks <- sorted_returns[1:n_tail]
 hill_alpha <- 1 / (mean(log(tail_shocks / x_threshold)))
 
 # Print Computed Evidence Summary Table
-cat("===========================================\n")
-cat("      CAS EVIDENCE GATHERING MATRIX        \n")
-cat("===========================================\n")
-cat("Target Asset Component: PAL\n")
-cat("Estimated Hurst Exponent (H) : ", round(estimated_H, 4), "\n")
-cat("Hill's Tail Decay Index (α)  : ", round(hill_alpha, 4), "\n")
-cat("-------------------------------------------\n\n")
+cat("===========================================\n",
+    "      CAS EVIDENCE GATHERING MATRIX        \n",
+    "===========================================\n",
+    "Target Asset Component: PAL\n",
+    "Estimated Hurst Exponent (H) : ", round(estimated_H, 4), "\n",
+    "Hill's Tail Decay Index (α)  : ", round(hill_alpha, 4), "\n",
+    "-------------------------------------------\n\n")
 
 
 # ------------------------------------------------------------------------------
@@ -588,10 +689,10 @@ if ((estimated_H > hurst_upper_bound || estimated_H < hurst_lower_bound) && hill
 }
 
 # Output programmatically derived Verdict and Detailed Summary
-cat("======================================================================\n")
-cat("FINAL PROGRAMMATIC INFERENCE VERDICT:", cas_verdict, "\n")
-cat("======================================================================\n")
-cat(cas_interpretation, "\n")
+cat("======================================================================\n", 
+    "FINAL PROGRAMMATIC INFERENCE VERDICT:", cas_verdict, "\n",
+    "======================================================================\n",
+    cas_interpretation, "\n")
 ```
  
 ## Synthesis
