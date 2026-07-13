@@ -385,31 +385,3 @@ cat("BTC-UAL correlation:", round(btc_ual_cor, 4), "\n")
 cat("BTC-PAL correlation:", round(btc_pal_cor, 4), "\n")
 cat("UAL-PAL correlation:", round(ual_pal_cor, 4), "\n")
 ```
-
-```{r bea-antijoin-pre-obs}
-cat("PAL:", nrow(df_list[["PAL"]]), "rows | UAL:", nrow(df_list[["UAL"]]), "rows\n")
-cat("anti_join surfaces which days diverge and whether the gap clusters seasonally.\n")
-```
-
-```{r bea-antijoin holiday-divergence}
-pal_only_days <- df_list[["PAL"]] %>% select(Date) %>%
-  anti_join(df_list[["UAL"]] %>% select(Date), by = "Date") %>%
-  filter(format(Date, "%Y-%m") != "2019-12") %>%
-  mutate(market = "PSE open, NYSE closed")
-
-ual_only_days <- df_list[["UAL"]] %>% select(Date) %>%
-  anti_join(df_list[["PAL"]] %>% select(Date), by = "Date") %>%
-  filter(format(Date, "%Y-%m") != "2019-12") %>%
-  mutate(market = "NYSE open, PSE closed")
-
-holiday_divergence_df <- bind_rows(pal_only_days, ual_only_days) %>% arrange(Date)
-print(holiday_divergence_df, n = 20)
-```
-
-```{r bea-antijoin-post-obs}
-cat("PSE-only trading days:", nrow(pal_only_days), "\n")
-cat("NYSE-only trading days:", nrow(ual_only_days), "\n")
-cat("These", nrow(holiday_divergence_df), "days are exactly what an inner_join would drop.\n")
-```
-
-
