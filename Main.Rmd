@@ -453,10 +453,10 @@ print(holiday_gap_days, n = 10)
 ```
 
 ```{r bea-antijoin-post-obs}
-cat("Of", nrow(pal_gap_days), "total PAL gap days,", nrow(halted_gap_days),
+cat("Of", nrow(pal_gap_days), "total PAL gap days, which are dates that are in UAL but are not in the PAL dataset,", nrow(halted_gap_days),
     sprintf("(%.0f%%)", 100 * nrow(halted_gap_days) / nrow(pal_gap_days)),
-    "are attributable to the single 285-day suspension --\n")
-cat("routine PSE-holiday mismatch accounts for only", nrow(holiday_gap_days), "days.\n")
+    "are attributable to the 285-day suspension. Note that the 285-day suspension is the total days between 2021-06-17 to 2022-03-27, which includes weekends, but because PAL and UAL does not include weekends, which is why only 196 is attributable to the suspension. \n")
+cat("Routine PSE-holiday mismatch accounts for only", nrow(holiday_gap_days), "days, which accounts for holidays starting from December 2019 to Decemer 2025. These are dates that PAL does not account for, but is included in the UAL dataset.\n")
 ```
 
 # SQL-Based Financial Investigation
@@ -489,8 +489,11 @@ pal_stats_comparison <- bind_rows(
 print(pal_stats_comparison, width = Inf)
 ```
 
+**Financial Interpretation:** Forward-filling raises PAL's share of zero-return days from 25.8% to 35.5% (about 1.4x), this pulls its standard deviation down (0.0252 to 0.0235) and inflating kurtosis (13.1 to 15.1). The halt gets recorded as "196 calm trading days" compared to "no market existed." 
 
-## SQL Investigation 2: Which Airline Is More Exposed to Oil -- UAL or PAL?
+This mirrors a well-documented problem in the finance literature: stale/non-synchronous pricing biases variance and covariance estimates downward (Scholes & Williams, 1977; Dimson, 1979), and the same effect has been measured directly in markets with frequent long suspensions: correcting for suspension bias shrinks return-based factor estimates materially in Chinese A-share data (Tian, 2019). `fuel_leftjoin_df` (naive) stays the default elsewhere in this file; Investigations 2-4 below explicitly opt into `fuel_leftjoin_df_masked` where the corrected series matters to the result.
+
+## SQL Investigation 2: Which Airline Is More Exposed to Oil: UAL or PAL?
 
 **Objective:** Compare United Airlines' and Philippine Airlines' sensitivity to WTI crude oil returns, using the corrected (halt-masked) PAL series, to determine which airline's stock carries more fuel-cost risk.
 
@@ -513,10 +516,11 @@ cat("UAL oil-beta:", round(ual_oil_beta, 4), "| p =", round(ual_oil_p, 4), "\n")
 cat("PAL oil-beta:", round(pal_oil_beta_masked, 4), "| p =", round(pal_oil_p_masked, 4), "\n")
 ```
 
+**Financial Interpretation:** Interestingly, although UAL's beta is *larger* in magnitude (+0.104) but *positively* signed, signifying that it moves with oil, consistent with oil and airline stocks both being pro-cyclical/demand-driven in a simple two-variable regression with no macro controls. PAL's beta is smaller (-0.078) but *negatively* signed, implying that the "rising fuel cost hurts an airline". So UAL shows the stronger statistical co-movement, but PAL shows the theoretically correct cost-channel relationship. 
 
-## SQL Investigation 3: The Ukraine Invasion Oil Shock -- A Natural Experiment in Market Friction
+## SQL Investigation 3: The Ukraine Invasion Oil Shock
 
-**Objective:** Test whether UAL's oil-sensitivity shifts during the acute Feb 24-Mar 8, 2022 shock (WTI spiked from ~$92.77 to a $123.64 peak, +33%) relative to its full-sample beta, and highlight that PAL has zero data for this exact window.
+**Objective:** Test whether UAL's oil-sensitivity shifts during the acute Feb 24-Mar 8, 2022 shock (WTI spiked from ~$92.77 to a $123.64 peak, +33%) relative to its full-sample beta. (Note: PAL has zero data for this exact window.)
 
 ```{r bea-sql3}
 ukraine_shock_df_all_ual <- fuel_leftjoin_df %>%
@@ -540,10 +544,11 @@ shock_vs_full <- tibble(
 print(shock_vs_full, width = Inf)
 ```
 
+**Financial Interpretation:** PAL has zero trading days in this window, its suspension (2021-06-17 to 2022-03-27) covers the entire shock. UAL investors could reprice the stock in real time against the oil spike; PAL investors could not trade at any price, favorable or not. That absence is itself the finding: a real-world illustration of market friction/information asymmetry, not just a data-cleaning footnote. UAL's own beta is also striking here: it *flips sign*, from +0.104 full-sample to -0.417 during the shock, alongside a -3.4% average daily return over those 9 days. That's consistent with the invasion being a broad risk-off/war-fear event that hit airline stocks directly (falling, alongside rising oil), temporarily overwhelming the smaller demand-channel co-movement seen in the full-sample average. (Small-sample caveat: only 9 trading days, so this is a noisy point estimate, but the direction and magnitude of the swing are large enough to be informative on their own.)
 
 ## SQL Investigation 4: Is UAL's Oil-Beta a Stable Relationship, or Just the Ukraine Shock?
 
-**Objective:** Split the sample into pre-shock, shock-era, and recovery sub-periods and recompute UAL's and PAL's oil-beta in each, to test whether Investigation 2's relationship is a structural feature or an artifact of one event. UAL is grouped from the naive `fuel_leftjoin_df` (it has no gaps to mask -- restricting it to PAL's available days would silently exclude the actual shock dates, since they fall inside PAL's halt window); PAL is grouped from `fuel_leftjoin_df_masked`. The two are joined back together by period for a side-by-side table.
+**Objective:** Split the sample into pre-shock, shock-era, and recovery sub-periods and recompute UAL's and PAL's oil-beta in each, to test whether Investigation 2's relationship is a structural feature or an artifact of one event. UAL is grouped from the naive `fuel_leftjoin_df` (it has no gaps to mask, and restricting it to PAL's available days would silently exclude the actual shock dates, since they fall inside PAL's halt window); PAL is grouped from `fuel_leftjoin_df_masked`. The two are joined back together by period for a side-by-side table.
 
 ```{r bea-sql4}
 period_label <- function(d) case_when(
@@ -577,8 +582,9 @@ period_beta <- ual_period_beta %>%
 print(period_beta, width = Inf)
 ```
 
+**Financial Interpretation:** UAL's beta is not stable. It swings from +0.178 (pre-shock) to -0.155 (shock era) to -0.020 (recovery), confirming that Investigation 2's full-sample beta (+0.104) is a blended average of genuinely different regimes, not a fixed structural relationship. The shock-era row is the most informative test of Investigation 3's finding: it includes the acute Ukraine-invasion days (unlike a PAL-restricted grouping would), and it does show a distinct, negative reading relative to the surrounding periods. PAL's beta stays negative throughout (-0.091, -0.083, -0.020), meaning its cost-channel sign (rising fuel prices squeezing PAL's margins, pulling its stock down) holds up more consistently than UAL's demand-channel co-movement (oil and airline stocks rising together with the broader economy) does. Its shock-era row does rest on only 193 real trading days against UAL's 251, though, a direct consequence of the suspension eating into exactly that period: the same missing-price-discovery issue from Investigation 3 showing up again.
 
-## SQL Investigation 5: `full_join` vs. `inner_join` -- Quantifying the Correlation Deflation
+## SQL Investigation 5: How Much Does PAL's Stagnant Period Deflate the UAL-PAL Correlation?
 
 **Objective:** Directly measure how much a naive `full_join` + forward-fill deflates the UAL-PAL return correlation compared to a strict `inner_join`, closing the loop back to Investigation 1's methodology point and justifying `inner_join`'s use in `bea-innerjoin`.
 
@@ -611,3 +617,4 @@ cat("Naive full_join + fill() correlation:", round(naive_cor, 4), "| N =", nrow(
 cat("Strict inner_join correlation:", round(strict_cor, 4), "| N =", nrow(ual_pal_innerjoin_df), "\n")
 ```
 
+**Financial Interpretation:** The naive version keeps a `full_join` across both calendars and forward-fills every gap, including the 285-day suspension, so N=1539 rows go into the naive correlation, many of them repeated/fabricated values rather than real paired price movements, pulling the coefficient toward whatever a flat series correlates at (near zero, by construction). The strict `inner_join` version drops to N=1206, using only days both stocks actually traded, so every observation is a real, paired price movement. This is the same deflation mechanism as Investigation 1, demonstrated on a pairwise statistic instead of a univariate one, and it's the direct justification for choosing `inner_join` over `full_join` for the BTC/UAL/PAL correlation work in `bea-innerjoin`.
