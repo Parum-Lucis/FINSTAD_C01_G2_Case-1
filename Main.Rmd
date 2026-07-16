@@ -5,7 +5,7 @@ date: "2026-07-01"
 output:
   html_document: 
     theme: cerulean         # Try: flatly,lymen, journal, darkly, cosmo, or sandstone
-    highlight: tango        # Try: kate, monochrome, espresso, zenburn
+    highlight: zenburn        # Try: kate, monochrome, espresso, zenburn, tango
     toc: true
     toc_depth: 2
     number_sections: true
@@ -28,4 +28,7 @@ You can run the child `.rmd` files in order in the same r session to get the out
 ```
 
 ```{r child-06-financial-investigation, echo=TRUE, child='06_financial_investigation.rmd'}
+```
+
+```{r child-07-investment-allocation, echo=TRUE, child='07_investment_allocation.rmd'}
 ```
