@@ -1,58 +1,83 @@
 # Financial Investigation
 
-In this section, we aim to model and investigate the relationship of these assets to the wide economy. The order of the analysis: Price Movement -> Risk and Correlation -> Macro Baseline.
+In this section, we model and investigate the relationship of `UAL`, `PAL`, `BTC-USD`, and `SPY` to the wider economy. The analysis proceeds outward in scale: Price Movement -> Risk and Correlation -> Macro Baseline.
 
-Each subsection is a wider lens that the previous and is meant from zooming in the economy in daily life to zooming out to the wider picture. Here, different sections ask fundamental questions:
+Each subsection is a wider lens than the one before it, zooming out from an asset's daily behavior to the macroeconomic backdrop that conditions it. Concretely, each section asks a progressively broader question:
 
- 1. **Price Movement** - ask a question of one one asset at a time.
- 2. **Risk and Correlation** - ask about the relationship between assets.
- 3. **Macro Baseline** - ask about the backdrop of all those assets.
+ 1. **Asset Movement** - how does *one* asset behave in isolation?
+ 2. **Risk and Correlation** - how do assets behave *relative to one another*?
+ 3. **Macro Baseline** - what *shared backdrop* (rates, inflation, the dollar's cost of capital) is quietly setting the terms for all of the above?
 
-This is to bring a meaningful scope from the previous subsection. We can't sensibly ask "how does UAL's correlation with SPY behave under stress" before you've established what "return" even means for UAL iself; meanwhile, you can't meaningfully frame "what regime are we in" until you've already seen regime-dependent behavior show up in the correlation data.
+This ordering is deliberate, not just organizational. We can't sensibly ask "how does UAL's correlation with SPY behave under stress" before establishing what "return" even means for UAL itself; and we can't meaningfully ask "what macro regime are we in" until regime-dependent behavior has already surfaced empirically in the correlation data. Each section's findings become the next section's motivation: unexplained memory in Price Movement motivates the correlation-breakdown tests in Risk and Correlation, and unexplained co-movement across *assets* in Risk and Correlation motivates the search for a common macro driver in Macro Baseline.
 
-This is also going by date frequency as price movement is all about fast-moving and granular data while the Macro Baseline is slowing-moving and very contextual.
+This progression also tracks data frequency. Price movement is fast, granular, and asset-specific (daily closes); correlation structure lives at the weekly-to-monthly cadence where regimes become visible; and the macro baseline (FEDFUNDS, DGS10, CPIAUCSL) is slow-moving, low-frequency, and shared across every asset in the dataset.
 
-Moreover, for each subsection, we aim to analyze in a more structured manner and that is by:
+Within each subsection, we apply a consistent four-part structure:
 
- 1. **Structure** - what is the raw state (e.g. log-adjusted return assets) to be analyzed, what is the enriched state, how do we compress this further?
- 2. **Dynamics** - defines the transition of each state, viewing either as conservative or dissaptive system, and what context from the transitions can be grouped together?
- 3. **Inference** - gather evidence w/ statistics from inferred behavior, create the decision rule, and create a verdict from them. 
- 4. **Synthesis** - from the three, and the two theoretical paradigms of each, conclude what can be said.
+ 1. **Structure** - what is the raw state (e.g., log-adjusted returns) to be analyzed, what is the enriched state derived from it, and how is that enriched state compressed into something tractable?
+ 2. **Dynamics** - what governs the *transition* between states over time? Is that transition conservative (energy/information-preserving, reversible) or dissipative (lossy, path-dependent)? What surrounding context lets us group transitions into regimes?
+ 3. **Inference** - what statistical evidence discriminates between competing accounts of the dynamics, what decision rule turns that evidence into a verdict, and what is the verdict?
+ 4. **Synthesis** - given Structure, Dynamics, and Inference, and given both theoretical paradigms below, what can we actually say about this asset/relationship/regime?
 
-Finally, for each we are going to use two theoretical paradigms to see how lenses view the market:
+For each of the four parts, we deliberately hold up **two competing theoretical paradigms** as lenses, since they lead to different structural assumptions, different transition models, and ultimately different risk conclusions from the *same* underlying data:
 
- 1. **Neoclassical Economics (NCE)** - Classic financial concepts that treats the financial system as a linear, rational, mechanical engine that naturally tends toward a stable equilibrium.
- 2. **Complex Adaptive Systems (CAS)** - This comes from the field of Econophysics. It views markets not as sterile machines, but as physical ecosystems where feedback loops, memory, friction, and shifting participant behavior constantly warp the environment out of equilibrium. 
+ 1. **Neoclassical Economics (NCE)** - the classical finance paradigm built on the Efficient Market Hypothesis , which holds that market prices fully reflect all available information (Fama, 1970 [2]), and on the mean-variance/CAPM tradition (Markowitz, 1952 [6]; Sharpe, 1964 [7]). Under NCE, the market is treated as a linear, rational, mechanical system: price innovations are independent, identically distributed, and Gaussian, and the system naturally tends toward a stable equilibrium in which risk scales predictably (e.g., via the square-root-of-time rule).
+ 2. **Complex Adaptive Systems (CAS)** - a paradigm drawn from *econophysics*, the application of statistical-physics tools to financial systems (Mantegna & Stanley, 1999 [10]). Rather than a sterile, equilibrium-seeking machine, CAS treats the market as an open, dissipative system: heterogeneous agents, feedback loops, memory, and friction continually push the system away from equilibrium (Bouchaud, Farmer, & Lillo, 2009 [1]; Lux & Marchesi, 1999 [11]). This tradition traces back to Mandelbrot's (1963) observation that speculative price changes are non-Gaussian and heavy-tailed [5], and is summarized empirically in Cont's (2001) catalogue of "stylized facts" of asset returns [12] - volatility clustering, heavy tails, and long-range dependence that the NCE baseline cannot generate.
 
-Of course, we will state Objective, Code (SQL/dplyr), Output, Financial Interpretation. 
+Each Structure/Dynamics/Inference/Synthesis step below therefore reports both an NCE account and a CAS account side by side: Objective, Code (SQL/dplyr), Output, and Financial Interpretation for each.
+
+> **Note (WIP):** the paradigm split isn't meant to declare a "winner" outright — CAS is not simply "NCE plus more math." The two paradigms make genuinely different claims about *why* markets behave the way they do (equilibrium-seeking rational agents vs. adaptive heterogeneous agents generating emergent structure), and our Inference steps are designed to let the data adjudicate which claim better describes `UAL`, `PAL`, `BTC-USD`, and `SPY` over 2020-2025, and whether the answer differs by asset.
 
 # Price Movement
 
-```{r exec-macro-baseline, echo=TRUE, child='06.1_asset_movement.rmd'}
+```{r exec-price-movement, echo=TRUE, child='06_1_asset_movement.rmd'}
 ```
+
+Having established what "return" means for each asset in isolation - and whether that return process shows evidence of memory, fat tails, or regime-dependent scaling - we now widen the lens from single-asset behavior to *joint* behavior. If Price Movement finds that an asset's own variance does not scale the way NCE predicts, the natural next question is whether that same non-equilibrium behavior shows up in how assets move *together*, particularly under stress.
 
 # Risk and Correlation
 
-```{r exec-macro-baseline, echo=TRUE, child='06.2_risk_and_correlation.rmd'}
+```{r exec-risk-correlation, echo=TRUE, child='06_2_risk_and_correlation.rmd'}
 ```
 
+With cross-asset relationships characterized - including whether diversification benefits hold up or collapse during high-VIX regimes - we widen the lens once more, from asset-to-asset structure to the macroeconomic backdrop shared by all four assets. If correlations concentrate during stress, the next question is what macro conditions (rate levels, curve shape, inflation regime) are driving that stress in the first place, and whether a single discount rate is even an adequate stand-in for "the cost of money" across `UAL`, `PAL`, and `BTC-USD` simultaneously.
 
 # Macro Baseline
 
-```{r exec-macro-baseline, echo=TRUE, child='06.3_macro_baseline.rmd'}
+```{r exec-macro-baseline, echo=TRUE, child='06_3_macro_baseline.rmd'}
 ```
 
 # Conclusion
 
+*(TBD - synthesize the Price Movement, Risk and Correlation, and Macro Baseline verdicts into a single statement of which paradigm - NCE, CAS, or a regime-dependent mix of both - best characterizes `UAL`, `PAL`, `BTC-USD`, and `SPY` over the sample period, and carry that conclusion into the Section 07 investment allocation.)*
+
 # References:
 
-- [1] Bouchaud, J. P., Farmer, J. D., & Lillo, F. (2009). "How Markets Slowly Digest Large Trading Orders." Handbook of Financial Markets: Dynamics and Evolution, 57–160.
-- [2] Fama, E. F. (1970). "Efficient Capital Markets: A Review of Theory and Empirical Work." The Journal of Finance, 25(2), 383–417.
-- [3] Grinold, R. C. (1989). "The Fundamental Law of Active Management." The Journal of Portfolio Management, 15(3), 30–38.
-- [4] Litterman, R., & Scheinkman, J. (1991). "Common Factors Affecting Bond Returns." The Journal of Fixed Income, 1(1), 54–61.
-- [5] Mandelbrot, B. (1963). "The Variation of Certain Speculative Prices." The Journal of Business, 36(4), 394–419.
-- [6] Markowitz, H. (1952). "Portfolio Selection." The Journal of Finance, 7(1), 77–91.
-- [7] Sharpe, W. F. (1964). "Capital Asset Prices: A Theory of Market Equilibrium under Conditions of Risk." The Journal of Finance, 19(3), 425–442.
-- [8] jetbundle. (2026). the black book of quantitative finance. https://www.youtube.com/watch?v=AKIkhuR7HYY
-- [9] jetbundle. (2026). 6 laws behind modern quantitative finance. https://www.youtube.com/watch?v=cvL_uWtMTAo
+**Neoclassical Economics / classical finance**
+
+- [2] Fama, E. F. (1970). Efficient capital markets: A review of theory and empirical work. *The Journal of Finance*, 25(2), 383-417.
+- [3] Grinold, R. C. (1989). The fundamental law of active management. *The Journal of Portfolio Management*, 15(3), 30-38.
+- [6] Markowitz, H. (1952). Portfolio selection. *The Journal of Finance*, 7(1), 77-91.
+- [7] Sharpe, W. F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. *The Journal of Finance*, 19(3), 425-442.
+- [9] Sewell, M. (2012). The efficient market hypothesis: Empirical evidence. *International Journal of Statistics and Probability*, 1(2), 164-178.
+- [13] Lo, A. W., & MacKinlay, A. C. (1988). Stock market prices do not follow random walks: Evidence from a simple specification test. *The Review of Financial Studies*, 1(1), 41-66.
+
+**Complex Adaptive Systems / econophysics**
+
+- [1] Bouchaud, J. P., Farmer, J. D., & Lillo, F. (2009). How markets slowly digest large trading orders. In *Handbook of Financial Markets: Dynamics and Evolution* (pp. 57-160).
+- [4] Litterman, R., & Scheinkman, J. (1991). Common factors affecting bond returns. *The Journal of Fixed Income*, 1(1), 54-61.
+- [5] Mandelbrot, B. (1963). The variation of certain speculative prices. *The Journal of Business*, 36(4), 394-419.
+- [10] Mantegna, R. N., & Stanley, H. E. (1999). *An Introduction to Econophysics: Correlations and Complexity in Finance*. Cambridge University Press.
+- [11] Lux, T., & Marchesi, M. (1999). Scaling and criticality in a stochastic multi-agent model of a financial market. *Nature*, 397(6719), 498-500.
+- [12] Cont, R. (2001). Empirical properties of asset returns: Stylized facts and statistical issues. *Quantitative Finance*, 1(2), 223-236.
+- [14] Hill, B. M. (1975). A simple general approach to inference about the tail of a distribution. *The Annals of Statistics*, 3(5), 1163-1174.
+- [15] Hurst, H. E. (1951). Long-term storage capacity of reservoirs. *Transactions of the American Society of Civil Engineers*, 116, 770-808.
+- [17] Sornette, D. (2003). *Why Stock Markets Crash: Critical Events in Complex Financial Systems*. Princeton University Press.
+- [18] Bak, P., Tang, C., & Wiesenfeld, K. (1987). Self-organized criticality: An explanation of the 1/f noise. *Physical Review Letters*, 59(4), 381-384.
+- [19] Minsky, H. P. (1992). The financial instability hypothesis. *Levy Economics Institute Working Paper No. 74*.
+
+**Supplementary / instructional**
+
+- [8] jetbundle. (2026). The black book of quantitative finance. https://www.youtube.com/watch?v=AKIkhuR7HYY
+- [16] jetbundle. (2026). 6 laws behind modern quantitative finance. https://www.youtube.com/watch?v=cvL_uWtMTAo
 

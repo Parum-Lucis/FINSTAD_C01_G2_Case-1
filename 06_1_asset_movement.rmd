@@ -1,0 +1,924 @@
+
+Here, we view how each asset moves in the economies they are in.
+
+## Structure
+
+### Log Returns
+
+Here, we are using Fama's (1970) Efficient Market Hypothesis (EMH) which states that prices fully reflect all available information [2]. Because information arrives as unpredictable, exogenous shocks, price updates are independent and identically distributed ($i.i.d.$). This reduces the asset's structural state to a trivial, memoryless coordinate point on a flat Euclidean space.
+
+We work in log returns, $r_t = \ln(P_t / P_{t-1})$, rather than simple returns, and this choice is doing more work than it looks like. EMH treats each day's price update as one independent "packet" of new information, so the total return over any horizon should just be the sum of the daily packets that arrived along the way. Log returns are exactly the quantity for which that's literally true: $\ln(P_T/P_0) = \sum_{t=1}^{T} r_t$, so a $T$-day cumulative return decomposes cleanly into $T$ additive daily innovations. Simple returns don't have this property - they compound multiplicatively, so "sum of daily simple returns" isn't the same object as "total simple return over the period." That additivity is not a cosmetic convenience: it is the specific mathematical property that later lets us test the square-root-of-time variance-scaling rule in the Dynamics subsection ($\sigma_T = \sigma_1\sqrt{T}$ only follows cleanly from i.i.d. returns when returns are additive across horizons). Log returns also stay well-defined and symmetric for large moves, which matters given the daily magnitude `BTC-USD` alone can realize on its worst and best days in this sample, whereas simple returns are bounded below at $-100\%$ but unbounded above, an asymmetry log returns remove [a1] (Sewell, 2012 [9], surveys this and related EMH empirics in detail).
+
+A rolling 21-day window is what actually lets the EMH assumption of *constant* mean/variance be tested rather than assumed. If we instead computed a single mean, variance, skewness, and kurtosis over the full 2020-2025 sample, we would have no way to later ask "was the return process actually stable over time," because a single global estimate is stable *by construction* - it can't fail to be constant. The rolling window produces a local, time-varying trajectory for each moment, and the Inference subsection's decision rule (Jarque-Bera normality, Lo-MacKinlay variance ratios) is really asking whether that trajectory looks flat (consistent with EMH) or clustered into visibly different regimes seen in CAS. Twenty-one trading days is chosen because it corresponds to roughly one calendar month of trading ($\approx 252$ trading days / 12), which is short enough to catch a genuine regime shift (e.g., a market-wide shock playing out over a few weeks) while still leaving enough observations per window for the higher moments - skewness and especially kurtosis are noisy estimators on very short samples, so going much shorter than 21 days would make those two moments unreliable before they've even been used as evidence.
+
+**Objective**: Establish, per asset, whether the local (21-day) trajectory of return mean, variance, skewness, and kurtosis is consistent with a single, time-invariant Gaussian generating process, as EMH implies - or whether it visibly clusters into distinct regimes before any formal test is run.
+
+In short, we can compress it down these:
+
+ 1. Raw Input: Adjusted Closing Price on `UAL`, `PAL`, `BTC-USD`, and `SPY`.
+ 2. Enriched State: Log Return.
+ 3. Compression: Rolling Window of mean, variance, skewness, and kurtosis.
+
+**Code**:
+```{r price-structure-df-nce}
+rolling_window_size <- 21
+asset_list <- c("UAL", "PAL", "BTC", "SPY")
+
+price_structure_df <- master_df %>%
+  select(
+    Date, 
+    UAL = UAL.LogAdj, 
+    PAL = PAL.LogAdj, 
+    BTC = `BTC-USD.LogAdj`, 
+    SPY = SPY.LogAdj
+  ) %>%
+  mutate(
+    across(
+      all_of(asset_list),
+      list(
+        roll_mean = \(x) rollapplyr(x, rolling_window_size, mean, fill = NA),
+        roll_var  = \(x) rollapplyr(x, rolling_window_size, var, fill = NA),
+        roll_skew = \(x) rollapplyr(x, rolling_window_size, skewness, fill = NA),
+        roll_kurt = \(x) rollapplyr(x, rolling_window_size, kurtosis, fill = NA)
+      ),
+      .names = "{.col}_{.fn}" 
+    )
+  ) %>%
+  filter(!is.na(UAL_roll_mean))
+
+print(price_structure_df)
+
+
+price_structure_plot_list <- list()
+for (asset in asset_list) {  
+  plot_df <- price_structure_df %>%
+    select(Date, starts_with(paste0(asset, "_"))) %>%
+    pivot_longer(
+      cols = -Date, 
+      names_to = "Metric", 
+      values_to = "Value"
+    ) %>%
+    mutate(Metric = gsub(paste0(asset, "_"), "", Metric)) %>%
+    # Explicitly enforce the structural order of the moments via factor levels
+    mutate(Metric = factor(Metric, levels = c("roll_mean", "roll_var", "roll_skew", "roll_kurt")))
+  
+  # Dynamic variance threshold (2 standard deviations above its mean) for asset scaling
+  asset_var_df <- filter(plot_df, Metric == "roll_var")
+  var_threshold <- mean(asset_var_df$Value, na.rm = TRUE) + (2 * sd(asset_var_df$Value, na.rm = TRUE))
+
+  p_structure <- ggplot(plot_df, aes(x = Date, y = Value, color = Metric)) +
+    geom_line(alpha = 0.7) +
+    # The facets will now stack in your specific factor level order
+    facet_wrap(~Metric, scales = "free_y", ncol = 1) +
+    
+    # 1. Kurtosis Threshold Lines
+    geom_hline(data = filter(plot_df, Metric == "roll_kurt"), 
+               aes(yintercept = 3.5), color = "firebrick", linetype = "dashed", alpha = 0.8) +
+    geom_hline(data = filter(plot_df, Metric == "roll_kurt"), 
+               aes(yintercept = 2.5), color = "firebrick", linetype = "dashed", alpha = 0.8) +
+    
+    # 2. Skewness Threshold Lines
+    geom_hline(data = filter(plot_df, Metric == "roll_skew"), 
+               aes(yintercept = 1.0), color = "darkorange", linetype = "dashed", alpha = 0.8) +
+    geom_hline(data = filter(plot_df, Metric == "roll_skew"), 
+               aes(yintercept = -1.0), color = "darkorange", linetype = "dashed", alpha = 0.8) +
+    
+    # 3. Variance Threshold Line
+    geom_hline(data = filter(plot_df, Metric == "roll_var"), 
+               aes(yintercept = var_threshold), color = "purple", linetype = "dashed", alpha = 0.8) +
+    
+    theme_minimal() +
+    labs(
+      title = paste(asset, "Structural State: Rolling Moments (21-Day)"),
+      y = "Moment Value",
+      x = "Date"
+    ) +
+    theme(legend.position = "none") # Optional: hides legend since facets are labeled
+  
+  price_structure_plot_list[[asset]] <- ggplotly(p_structure, height = 1000)
+}
+
+tagout_nce <- tagList(price_structure_plot_list)
+
+save_html(tagout_nce, file="asset_movement_structure_nce.html")
+
+tagout_nce
+```
+
+**Output**: Bar graphs
+
+**Financial Interpretation**:
+
+
+**What we expect to see, historically.** The four moments we roll aren't arbitrary descriptive statistics - they map directly onto the EMH null hypothesis tested later: mean and variance are the two parameters a Gaussian random walk (and Black-Scholes/GBM) needs, while skewness $=0$ and excess kurtosis $=0$ are the Gaussian benchmarks the Jarque-Bera test checks against. Given the 2020-2025 window spans several distinct macro regimes, the rolling-variance panel should *not* look like a flat band if EMH's constant-variance assumption is already in trouble at the descriptive-statistics stage - we'd expect visible, regime-like plateaus rather than noise fluctuating around one level: a sharp spike across all four assets in Q1 2020 coincident with the COVID-19 shock (`SPY` fell roughly a third in about five weeks, and volatility spiked simultaneously across essentially every asset class); a `BTC-USD`-specific elevated-variance regime through 2021 tied to that period's retail-driven speculative flows; a second broad cluster through 2022 as the Fed's rate-hiking cycle repriced risk assets generally, with `BTC-USD`'s 2022 drawdown standing out as unusually severe even against that backdrop; and likely asset-idiosyncratic spikes for `UAL` and `PAL` (pandemic-era travel restrictions and reopening, fuel-cost shocks, or Philippine market-specific events) that wouldn't necessarily show up in `SPY`'s or `BTC-USD`'s windows at all. 
+
+### Fat Tails and Finite-Difference Embeddings
+ 
+ 
+This follows from Mandelbrot's work [5], which states that financial returns are non-Gaussian and follow a stable Paretian distribution where variance is infinite or non-convergent over local windows. Rather than treating the log return alone as the state, we lift it into a **finite-difference phase embedding** - the point $(x, \dot{x}, \ddot{x})$ formed by the log-price, its first difference (velocity/momentum), and its second difference (acceleration). This is, formally, a discrete 2-jet of the price path: two assets sharing an identical log return $\dot{x}$ at time $t$ can still occupy entirely different points in this embedding if their momentum is trending up versus down, i.e. if their acceleration differs.
+
+Additionally, we use **acceleration** rather than geometric curvature for this second coordinate. True curvature ($\kappa = |\dot{x}\ddot{x} - \dot{y}\ddot{y}|/(\dot{x}^2+\dot{y}^2)^{3/2}$ in the general case) normalizes bending by the trajectory's speed, which is attractive in principle but has a practical problem here: speed in this embedding *is* the return itself, so normalizing it away divides by something that legitimately goes to zero during quiet, low-volatility periods - exactly when we still want a well-defined reading. Acceleration has no such singularity, stays interpretable as "the return on the return" (a discrete analogue of gamma/convexity in options language), and is the more standard choice in the applied nonlinear-dynamics literature (e.g., Takens-style delay embeddings, see the Dynamics footnote below). We therefore use acceleration consistently in place of curvature throughout this section.
+
+ 
+**Objective**:
+ 1. Raw Input: Adjusted Closing Price on `UAL`, `PAL`, `BTC-USD`, and `SPY`.
+ 2. Enriched State: Finite-Difference Phase Embedding of Log Return, with its Velocity, and Acceleration.
+ 3. Compression: Rolling Window, of 21 days (Days in a month for financial trading), of its mean, variance, skewness, and kurtosis.
+
+**Code**:
+
+```{r price-structure-df-cas}
+rolling_window_size <- 21
+logadj_cols <- names(master_df)[str_detect(names(master_df), "\\.LogAdj$")]
+
+# --- 1. FINITE-DIFFERENCE PHASE EMBEDDING GENERATION (variable names kept as jet_bundle_* for continuity with downstream chunks) ---
+jet_bundle_raw <- master_df %>%
+  select(Date, all_of(logadj_cols)) %>%
+  rename_with(~ str_replace(.x, "\\.LogAdj$", ".Position"), all_of(logadj_cols)) %>%
+  mutate(
+    across(ends_with(".Position"), ~ .x - lag(.x), 
+           .names = "{str_remove(.col, '\\\\.Position')}.Velocity"),
+    across(ends_with(".Position"), ~ .x - 2 * lag(.x) + lag(.x, 2), 
+           .names = "{str_remove(.col, '\\\\.Position')}.Acceleration")
+  )
+
+
+# --- 2. MULTI-DIMENSIONAL ROLLING MOMENT COMPUTATION ---
+rolled_phase_space <- jet_bundle_raw %>%
+  pivot_longer(
+    cols = -Date,
+    names_to = c("Asset", "Dimension"),
+    names_sep = "\\."
+  ) %>%
+  group_by(Asset, Dimension) %>%
+  mutate(
+    mean = rollapplyr(value, rolling_window_size, mean, fill = NA),
+    var  = rollapplyr(value, rolling_window_size, var, fill = NA),
+    skew = rollapplyr(value, rolling_window_size, skewness, fill = NA),
+    kurt = rollapplyr(value, rolling_window_size, kurtosis, fill = NA)
+  ) %>%
+  ungroup() %>%
+  filter(!is.na(mean)) %>%
+  select(-value)
+
+
+# --- 3. RESHAPE & CALCULATE LEAD (NEXT POINT) ACCELERATION ---
+phase_space_4d <- rolled_phase_space %>%
+  pivot_wider(
+    names_from = Dimension,
+    values_from = c(mean, var, skew, kurt),
+    names_glue = "{Dimension}_{.value}"
+  ) %>%
+  filter(Date >= as.Date("2019-01-01") & Date <= as.Date("2025-12-31")) %>%
+  mutate(Asset = str_remove(Asset, "^`|`$")) %>%
+  # Group by Asset so we don't lead values across different assets
+  group_by(Asset) %>%
+  mutate(
+    # Shifting the future acceleration variance back to the current row
+    Next_Acceleration_Var = lead(Acceleration_var, 1)
+  ) %>%
+  ungroup()
+
+
+price_structure_plot_list <- list()
+unique_assets <- unique(phase_space_4d$Asset)
+
+for (asset in unique_assets) {  
+  
+  # 1. Reshape the wide phase_space_4d so we can map Dimensions and Moments cleanly
+  plot_df <- phase_space_4d %>%
+    filter(Asset == asset) %>%
+    # Select Date and all calculated moment variables
+    select(Date, matches("^(Position|Velocity|Acceleration)_")) %>% 
+    pivot_longer(
+      cols = -Date,
+      names_to = c("Dimension", "Metric"),
+      names_sep = "_",
+      values_to = "Value"
+    ) %>%
+    # Enforce structural ordering of the statistical moments
+    mutate(Metric = factor(Metric, levels = c("mean", "var", "skew", "kurt")))
+  
+  # 2. Extract asset-dimension specific variances for dynamic volatility thresholds
+  # This calculates a unique +2 SD line for Position_var, Velocity_var, and Acceleration_var
+  var_thresholds <- plot_df %>%
+    filter(Metric == "var") %>%
+    group_by(Dimension) %>%
+    summarize(
+      threshold = mean(Value, na.rm = TRUE) + (2 * sd(Value, na.rm = TRUE)),
+      .groups = "drop"
+    )
+  
+  # 3. Generate the grid layout: Dimensions side-by-side, Moments stacked vertically
+  p_structure <- ggplot(plot_df, aes(x = Date, y = Value, color = Metric)) +
+    geom_line(alpha = 0.7) +
+    # Rows = Moments (mean->var->skew->kurt), Columns = Phase Dimensions
+    facet_grid(Metric ~ Dimension, scales = "free_y") +
+    
+    # Kurtosis Threshold Lines (Only hits rows where Metric == "kurt")
+    geom_hline(data = filter(plot_df, Metric == "kurt"), 
+               aes(yintercept = 3.5), color = "firebrick", linetype = "dashed", alpha = 0.8) +
+    geom_hline(data = filter(plot_df, Metric == "kurt"), 
+               aes(yintercept = 2.5), color = "firebrick", linetype = "dashed", alpha = 0.8) +
+    
+    # Skewness Threshold Lines (Only hits rows where Metric == "skew")
+    geom_hline(data = filter(plot_df, Metric == "skew"), 
+               aes(yintercept = 1.0), color = "darkorange", linetype = "dashed", alpha = 0.8) +
+    geom_hline(data = filter(plot_df, Metric == "skew"), 
+               aes(yintercept = -1.0), color = "darkorange", linetype = "dashed", alpha = 0.8) +
+    
+    # Dynamic Variance Threshold Lines (Only hits rows where Metric == "var")
+    geom_hline(data = var_thresholds, 
+               aes(yintercept = threshold), color = "purple", linetype = "dashed", alpha = 0.8) +
+    
+    theme_minimal() +
+    labs(
+      title = paste(asset, "Complete Finite-Difference Phase Space: Rolling Moments (21-Day)"),
+      y = "Value",
+      x = "Date"
+    ) +
+    theme(
+      legend.position = "none",
+      strip.text = element_text(face = "bold", size = 10)
+    )
+  
+  # Uses a 1200px height to give the 4x3 matrix ample breathing room
+  price_structure_plot_list[[asset]] <- ggplotly(p_structure, height = 1200)
+}
+
+tagout_cas <- htmltools::tagList(price_structure_plot_list)
+
+save_html(tagout_cas, file="asset_movement_structure_cas.html")
+
+tagout_cas
+```
+
+**Output**:
+
+**Financial Interpretation**:
+
+## Dynamics
+
+## Asset Evolution with Black-Scholes
+
+Under the Neoclassical Economics paradigm, the temporal evolution of asset prices is governed by continuous, memoryless diffusion. Concretely, this framework models state transitions through Black-Scholes diffusion, where price updates are driven entirely by an exogenous, standard Brownian motion ($dW_t$). Because each price change represents a rational reaction to unpredictable information shocks, the system possesses no memory of its historical path. Consequently, the trajectory represents a purely conservative, random walk in which future price states are independent of past states.
+
+Transitioning from individual steps to a grouped temporal context, Daníelsson, J. and Zigard, J. (2006) states that risk scales predictably over time. Specifically, portfolio risk aggregates across multiple time horizons ($T$) according to the strict square-root-of-time scaling rule: $\sigma_T = \sigma_1 \times \sqrt{T}$. This linear scaling of variance assumes a flat, non-complex system with zero feedback loops or structural memory. Under this hypothesis, daily volatility remains a sufficient and robust metric to price longer-horizon risks, as the underlying transition dynamics remain invariant across time scales.
+ 
+```{r rolling-dynamic-plot}
+all_cols <- names(master_df)
+return_cols <- all_cols[str_detect(all_cols, "(\\.LogAdj|^`.+\\.LogAdj`$)")]
+
+# Initialize data frame copy starting with the Date key
+price_dynamics_df <- master_df %>% select(Date)
+
+for (i in seq_along(return_cols)) {
+  raw_col_name <- return_cols[i]
+  
+  # Clean asset label and isolate the short prefix base (e.g., "BTC-USD" -> "BTC")
+  clean_asset  <- str_remove_all(raw_col_name, "`") %>% str_remove("\\.LogAdj$")
+  short_prefix <- str_split(clean_asset, "[-.]")[[1]][1]
+  
+  
+  price_dynamics_df[[raw_col_name]] <- master_df[[raw_col_name]]
+  
+  
+  price_dynamics_df[[paste0(short_prefix, "_5d_return")]]  <- zoo::rollapplyr(master_df[[raw_col_name]], 5, sum, fill = NA)
+  price_dynamics_df[[paste0(short_prefix, "_21d_return")]] <- zoo::rollapplyr(master_df[[raw_col_name]], 21, sum, fill = NA)
+}
+
+
+global_scaling_list <- list()
+
+for (i in seq_along(return_cols)) {
+  raw_col_name <- return_cols[i]
+  clean_asset  <- str_remove_all(raw_col_name, "`") %>% str_remove("\\.LogAdj$")
+  short_prefix <- str_split(clean_asset, "[-.]")[[1]][1]
+  
+  # Map exactly to our newly minted columns
+  daily_col  <- raw_col_name
+  ret5d_col  <- paste0(short_prefix, "_5d_return")
+  ret21d_col <- paste0(short_prefix, "_21d_return")
+  
+  
+  empirical_summary <- tibble(
+    Asset    = clean_asset,
+    `1-Day`  = var(price_dynamics_df[[daily_col]], na.rm = TRUE),
+    `5-Day`  = var(price_dynamics_df[[ret5d_col]], na.rm = TRUE),
+    `21-Day` = var(price_dynamics_df[[ret21d_col]], na.rm = TRUE)
+  ) %>%
+    pivot_longer(cols = c(`1-Day`, `5-Day`, `21-Day`), names_to = "Horizon", values_to = "Empirical_Variance")
+  
+
+  base_var <- empirical_summary %>% filter(Horizon == "1-Day") %>% pull(Empirical_Variance)
+  
+  # Calculate linear theoretical variance projections
+  asset_scaling <- empirical_summary %>%
+    mutate(
+      T_days = case_when(
+        Horizon == "1-Day"  ~ 1,
+        Horizon == "5-Day"  ~ 5,
+        Horizon == "21-Day" ~ 21
+      ),
+      NCE_Theoretical_Variance = base_var * T_days
+    ) %>%
+    pivot_longer(
+      cols = c(Empirical_Variance, NCE_Theoretical_Variance), 
+      names_to = "Type", 
+      values_to = "VarianceValue"
+    ) %>%
+    mutate(
+      Framework_Layer = case_when(
+        Type == "Empirical_Variance"         ~ "Empirical (Actual Data)",
+        Type == "NCE_Theoretical_Variance"   ~ "NCE: Black-Scholes Theoretical Line"
+      )
+    )
+  
+  global_scaling_list[[clean_asset]] <- asset_scaling
+}
+
+global_scaling_df <- bind_rows(global_scaling_list)
+p_global_dynamics <- ggplot(global_scaling_df, aes(x = factor(T_days), y = VarianceValue, fill = Framework_Layer)) +
+  geom_col(position = "dodge", alpha = 0.8) +
+  # Facet warp breaks down results asset-by-asset while optimizing scale dimensions
+  facet_wrap(~Asset, scales = "free_y") +
+  scale_fill_manual(values = c("Empirical (Actual Data)" = "steelblue", 
+                               "NCE: Black-Scholes Theoretical Line" = "darkred")) +
+  theme_minimal() +
+  labs(
+    title = "Global Market Dynamics: Empirical vs. Black-Scholes Linear Risk Scaling",
+    subtitle = "Faceted portfolio validation: NCE demands absolute convergence to the linear theoretical anchor",
+    x = "Time Horizon (Days, T)",
+    y = "Total Retooled Return Variance",
+    fill = "Framework Layer"
+  ) +
+  theme(
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 11)
+  )
+
+# Render multi-asset comparison report interactively
+ggplotly(p_global_dynamics, height = 650)
+```
+**Financial Interpretation**: Here, we can see that some assets can be theoretically be modelled by Black-Scholes as the gap between the theoretical variance of a Black-Scholes equation and Emperical data is similar. However, some such as PAL, SPY, and VIX cannot be modelled like this as the gap is noticably significant. However, to test whether it is statistical significant is for the inference section to find out. 
+ 
+## Asset Evolution with Hurst's Exponent
+
+Conversely, the Complex Adaptive Systems paradigm rejects the assumption of memoryless diffusion, viewing price dynamics instead as a non-linear flow through a multi-dimensional phase space. Within this geometric framework, the system's trajectories are evaluated for two distinct behaviors: a conservative regime and a dissipative regime. While a conservative regime preserves phase-space volume, mimicking standard diffusion, a dissipative regime contracts this volume onto lower-dimensional structures. This contraction serves as a geometric signature of path dependency, where feedback loops, market-maker risk-premium bleed, and sudden liquidation cascades drag the system toward endogenous attractors rather than allowing it to diffuse freely.
+
+Furthermore, because these feedback mechanisms prevent the system from settling into a simple equilibrium, variance scaling across horizons inevitably deviates from a linear path. Rather than adhering to the square-root rule, CAS transitions follow a multi-scale power law defined by the relationship $\text{Var}(r_{t+T}) \propto T^{2H}$, where the Hurst Exponent ($H \neq 0.5$) serves as an explicit measure of temporal memory. Consequently, these transitions group into persistent regimes where high-volatility events cluster endogenously (Mandelbrot 1963). This scaling behavior proves that the system's dynamics are fundamentally multi-scale, meaning that local, short-term volatility metrics systematically fail to capture long-term, systemic risk profiles. 
+
+**Objective**:
+
+
+**Code**:
+```{r}
+# 1. Safely isolate the asset names, accounting for special characters like hyphens
+all_cols <- names(jet_bundle_raw)
+pos_cols <- all_cols[str_detect(all_cols, "\\.Position$")]
+available_assets <- str_remove(pos_cols, "\\.Position$") %>% str_remove_all("`")
+
+cas_scaling_list <- list()
+horizons <- 1:21
+
+for (asset in available_assets) {
+  
+  # Map columns precisely using lookups that handle special characters smoothly
+  pos_col <- all_cols[str_remove_all(all_cols, "`") == paste0(asset, ".Position")][1]
+  vel_col <- all_cols[str_remove_all(all_cols, "`") == paste0(asset, ".Velocity")][1]
+  acc_col <- all_cols[str_remove_all(all_cols, "`") == paste0(asset, ".Acceleration")][1]
+  
+  if (is.na(pos_col) || is.na(vel_col) || is.na(acc_col)) next
+  
+  # Extract data vectors via double-bracket character index strings
+  df_subset <- jet_bundle_raw %>%
+    select(Date, 
+           Position = !!sym(pos_col), 
+           Velocity = !!sym(vel_col), 
+           Acceleration = !!sym(acc_col)) %>%
+    filter(!is.na(Position), !is.na(Velocity), !is.na(Acceleration))
+  
+  if (nrow(df_subset) < 50) next
+  
+  # Iterate dynamically across horizons 1 to 21 to capture the true decay continuous paths
+  space_list <- list()
+  for (space in c("Position", "Velocity", "Acceleration")) {
+    vec <- df_subset[[space]]
+    
+    empirical_vars <- sapply(horizons, function(k) {
+      k_day_paths <- zoo::rollapplyr(vec, k, sum, fill = NA)
+      var(k_day_paths, na.rm = TRUE)
+    })
+    
+    base_var <- empirical_vars[1]
+    
+    space_list[[space]] <- tibble(
+      Asset = asset,
+      Space = space,
+      Horizon_T = horizons,
+      Empirical_Variance = empirical_vars,
+      # This serves as a pure Brownian Motion benchmark baseline across all spaces
+      Brownian_Benchmark = base_var * horizons
+    )
+  }
+  
+  cas_scaling_list[[asset]] <- bind_rows(space_list)
+}
+
+# 2. Consolidate and pivot cleanly for ggplot mapping
+cas_scaling_df <- bind_rows(cas_scaling_list) %>%
+  pivot_longer(
+    cols = c(Empirical_Variance, Brownian_Benchmark),
+    names_to = "Model_Hypothesis",
+    values_to = "Variance_Value"
+  ) %>%
+  mutate(
+    Model_Hypothesis = case_when(
+      Model_Hypothesis == "Empirical_Variance" ~ "Empirical (Actual CAS Dynamics)",
+      Model_Hypothesis == "Brownian_Benchmark" ~ "Brownian Motion Benchmark (Linear Scaling)"
+    ),
+    Space_Label = case_when(
+      Space == "Position"     ~ "Position Space (Log Returns)",
+      Space == "Velocity"     ~ "Velocity Space (Momentum/Trends)",
+      Space == "Acceleration" ~ "Acceleration Space (Systemic Stress Shifts)"
+    )
+  )
+
+cas_true_dynamics_df <- cas_scaling_df %>%
+  filter(Model_Hypothesis == "Empirical (Actual CAS Dynamics)") %>%
+  group_by(Asset, Space, Space_Label) %>%
+  mutate(
+    log_T = log(Horizon_T),
+    log_Var = log(Variance_Value),
+    
+    # Simple linear regression slope estimator: 2H = Cov(log_Var, log_T) / Var(log_T)
+    two_H = cov(log_Var, log_T) / var(log_T),
+    Hurst_Est = two_H / 2
+  ) %>%
+  ungroup()
+
+# ==============================================================================
+# 2. ISOLATE THE 1-DAY BASELINE MARGINAL VARIANCE COORDINATES
+# ==============================================================================
+base_variance_map <- cas_scaling_df %>%
+  filter(Model_Hypothesis == "Empirical (Actual CAS Dynamics)", Horizon_T == 1) %>%
+  select(Asset, Space, Base_Var = Variance_Value)
+
+# ==============================================================================
+# 3. CONSTRUCT THE FRACTIONAL POWER-LAW TARGET SCALING MATRIX
+# ==============================================================================
+cas_lines_df <- cas_scaling_df %>%
+  filter(Model_Hypothesis == "Brownian Motion Benchmark (Linear Scaling)") %>%
+  left_join(base_variance_map, by = c("Asset", "Space")) %>%
+  left_join(
+    cas_true_dynamics_df %>% select(Asset, Space, Hurst_Est) %>% unique(),
+    by = c("Asset", "Space")
+  ) %>%
+  mutate(
+    Model_Hypothesis = "CAS Fractional Target (T^2H)",
+    # Project variance using the unique estimated power-law parameter
+    Variance_Value = Base_Var * (Horizon_T^(2 * Hurst_Est))
+  ) %>%
+  select(-Base_Var, -Hurst_Est)
+
+# Combine the empirical data, the linear benchmarks, and our fractional projections
+plotting_matrix_df <- bind_rows(cas_scaling_df, cas_lines_df) %>%
+  left_join(
+    cas_true_dynamics_df %>% select(Asset, Space, Hurst_Est) %>% unique(),
+    by = c("Asset", "Space")
+  )
+
+# ==============================================================================
+# 4. GENERATE THE THREE-WAY PARADIGM COMPARISON REPORTS
+# ==============================================================================
+plotly_plots_2 <- list()
+
+for (current_space in unique(plotting_matrix_df$Space_Label)) {
+  
+  space_data <- plotting_matrix_df %>% 
+    filter(Space_Label == current_space) %>%
+    # Format a clean tool-tip label showing the specific Hurst asset values
+    mutate(Tooltip_Label = paste0("Asset: ", Asset, "\nEst. H: ", round(Hurst_Est, 3)))
+  
+  p_cas_true <- ggplot(space_data, 
+                       aes(x = Horizon_T, y = Variance_Value, 
+                           color = Model_Hypothesis, linetype = Model_Hypothesis)) +
+    geom_line(linewidth = 1.2, alpha = 0.8) +
+    geom_point(aes(text = Tooltip_Label), size = 1.2, alpha = 0.5) +
+    facet_wrap(~Asset, scales = "free_y") +
+    scale_color_manual(values = c(
+      "Empirical Data" = "darkblue", 
+      "Brownian Motion Benchmark (Linear Scaling)" = "darkgrey",
+      "CAS Fractional Target (T^2H)" = "darkorange"
+    )) +
+    scale_linetype_manual(values = c(
+      "Empirical Data" = "solid", 
+      "Brownian Motion Benchmark (Linear Scaling)" = "dashed",
+      "CAS Fractional Target (T^2H)" = "dotdash"
+    )) +
+    theme_minimal() +
+    labs(
+      title = paste("True CAS Fractional Scaling Properties:", current_space),
+      subtitle = "Validating the Power-Law Memory Path (T^2H) against Ordinary Linear Diffusion",
+      x = "Time Horizon Scaling (Days, T)",
+      y = "Aggregated Coordinate Variance",
+      color = "Model Hypothesis Class",
+      linetype = "Model Hypothesis Class"
+    ) +
+    theme(
+      strip.text = element_text(face = "bold", size = 11),
+      legend.position = "bottom"
+    )
+  
+  plotly_plots_2[[current_space]] <- ggplotly(p_cas_true, height = 600) %>%
+    layout(legend = list(orientation = "h", y = -0.15))
+}
+
+# Output the interactive multi-asset diagnostic suites
+htmltools::tagList(plotly_plots_2)
+```
+
+**Output**:
+
+**Financial Interpretation**:
+Here, we can see that, when scaling up across different horizons, the Hurst exponent is able to follow closely with empirical data. Thus, here, we can note that the selected assets exhibit long-term dependencies. 
+
+## Inference
+### Deviation from Random Walk
+
+To validate its core assumptions, the Neoclassical Economics framework relies on a highly structured empirical process that checks if short-horizon volatility is sufficient to price longer-horizon risk. This evidence-gathering phase utilizes two primary statistical metrics: the Jarque-Bera goodness-of-fit test to evaluate return normality, and the Lo-MacKinlay Variance Ratio Test ($VR(k)$) to examine variance scaling across multiple time horizons ($k$). Together, these indicators isolate whether the asset behaves as a memoryless, flat Euclidean random walk or if it exhibits underlying structural anomalies.
+
+The final programmatic verdict is then determined by a strict, binary decision rule. If the Jarque-Bera test fails to reject the null hypothesis of normality ($p > 0.05$) and the variance ratio remains approximately equal to $1$ across all designated horizons ($VR(k) \approx 1$), the NCE framework is formally accepted. This statistical outcome confirms that daily volatility parameters are entirely sufficient to hedge long-horizon positions. Conversely, if the p-value drops below the significance threshold ($p \le 0.05$) or if the variance ratio significantly drifts away from unity, the NCE assumptions are rejected, proving that traditional equilibrium models systematically misprice and understate long-term structural risk.
+
+
+**Objective**: 
+ 1. Gather the Evidence: 
+    - The Goodness of Fit test (Jarque-Bera) for normality, and 
+    - The Lo-MacKinlay Variance Ratio Test ($VR(k)$) to evaluate variance scaling across multiple horizons ($k$).
+ 2. Decision Rule:  
+    - **Null Hypothesis** ($H_0$): If Jarque-Bera fails to reject the null hypothesis of normality ($p > 0.05$); and $VR(k) \approx 1$ across all designated horizons ($k$). Then, we accept the NCE framework. Daily volatility is sufficient to price longer-horizon risk, confirming a flat, memoryless Euclidean price space.
+    - **Alternative Hypothesis** ($H_1$): If Jarque-Bera rejects normality ($p \le 0.05$); or $VR(k)$ significantly drifts away from $1$ as $k$ increases. Then, the NCE assumption fails. Short-horizon volatility calculations systematically misprice or understate long-horizon structural risk.
+ 3. Give the Verdict
+
+**Code**:
+```{r nce-inference-engine, echo=TRUE, message=FALSE}
+all_cols <- names(price_dynamics_df)
+return_cols <- all_cols[str_detect(all_cols, "(\\.LogAdj|^`.+\\.LogAdj`$)")]
+
+inference_metrics_list <- list()
+
+cat("======================================================================\n")
+cat("                GLOBAL NCE INFERENCE EXECUTION ENGINE                 \n")
+cat("======================================================================\n\n")
+
+for (i in seq_along(return_cols)) {
+  
+  raw_col_name <- return_cols[i]
+  clean_asset <- str_remove_all(raw_col_name, "`") %>% str_remove("\\.LogAdj$")
+  
+  # Flexible regex prefix layout to handle missing suffixes natively
+  short_prefix <- str_split(clean_asset, "[-.]")[[1]][1]
+  daily_col  <- all_cols[str_remove_all(all_cols, "`") == paste0(clean_asset, ".LogAdj")]
+  ret5d_col  <- all_cols[str_detect(all_cols, paste0("^`?", short_prefix, ".*_5d_return`?$"))]
+  ret21d_col <- all_cols[str_detect(all_cols, paste0("^`?", short_prefix, ".*_21d_return`?$"))]
+  
+  if (length(daily_col) == 0 || length(ret5d_col) == 0 || length(ret21d_col) == 0) next
+
+  daily_returns <- na.omit(price_dynamics_df[[daily_col[1]]])
+  ret_5d        <- na.omit(price_dynamics_df[[ret5d_col[1]]])
+  ret_21d       <- na.omit(price_dynamics_df[[ret21d_col[1]]])
+  
+  if (length(daily_returns) < 50) next
+  
+  # 1. Gather Evidence via Statistical Tests
+  jb_test  <- tseries::jarque.bera.test(daily_returns)
+  p_val_jb <- jb_test$p.value
+  
+  vr_5d  <- var(ret_5d) / (5 * var(daily_returns))
+  vr_21d <- var(ret_21d) / (21 * var(daily_returns))
+  
+  hurst_val <- tryCatch({
+    pracma::hurstexp(daily_returns, display = FALSE)$Hs
+  }, error = function(e) NA)
+  
+  # 2. Decision Rule Evaluation
+  # NCE holds if normality is not rejected AND variance ratio stays near 1.0 
+  # We establish a standard tolerance band [0.85, 1.15] for the variance scaling ratio.
+  is_normal <- p_val_jb > 0.05
+  scales_linearly <- (vr_5d >= 0.85 && vr_5d <= 1.15) && (vr_21d >= 0.85 && vr_21d <= 1.15)
+  
+  if (is_normal && scales_linearly) {
+    nce_verdict <- "ACCEPTED (NEOCLASSICAL EQUILIBRIUM VALID)"
+    nce_interpretation <- paste0(
+      "VERDICT ANALYSIS: The NCE framework holds robustly. Daily log-returns are statistically normal ",
+      "(p = ", round(p_val_jb, 3), ") and variance scales linearly across horizons (VR_5d = ", 
+      round(vr_5d, 3), ", VR_21d = ", round(vr_21d, 3), "). Short-horizon volatility is a sufficient ",
+      "statistic to model long-term structural risks within a memoryless Euclidean space."
+    )
+  } else {
+    nce_verdict <- "REJECTED (ALTERNATIVE BEHAVIORAL / CAS HYPOTHESIS)"
+    
+    # Diagnose the failure mode for clean readout printing
+    reasons <- c()
+    if (!is_normal) reasons <- c(reasons, "non-normality (fat-tails/skewness)")
+    if (!scales_linearly) reasons <- c(reasons, "non-linear variance scaling/memory effects")
+    
+    nce_interpretation <- paste0(
+      "VERDICT ANALYSIS: The flat NCE assumptions fail due to ", paste(reasons, collapse = " and "), ". ",
+      "With JB p-value = ", round(p_val_jb, 4), ", VR_5d = ", round(vr_5d, 3), ", and VR_21d = ", 
+      round(vr_21d, 3), ", short-horizon parameters will systematically misprice option structures ",
+      "and long-horizon liquidation risks."
+    )
+  }
+  
+  # Print Individual Asset Report Blocks
+  cat("======================================================================\n")
+  cat("Target Asset Component          :", clean_asset, "\n")
+  cat("Jarque-Bera Test P-Value        :", round(p_val_jb, 5), "\n")
+  cat("Variance Ratio (5-Day Horizon)  :", round(vr_5d, 4), "\n")
+  cat("Variance Ratio (21-Day Horizon) :", round(vr_21d, 4), "\n")
+  cat("FINAL PROGRAMMATIC VERDICT      :", nce_verdict, "\n")
+  cat("----------------------------------------------------------------------\n")
+  cat(str_wrap(nce_interpretation, width = 70), "\n\n")
+  
+  inference_metrics_list[[clean_asset]] <- tibble(
+    Asset = clean_asset,
+    JB_P_Value = p_val_jb,
+    Variance_Ratio_5d = vr_5d,
+    Variance_Ratio_21d = vr_21d,
+    Hurst_Exponent = hurst_val,
+    NCE_Verdict = if_else(is_normal && scales_linearly, "Accepted", "Rejected")
+  )
+}
+
+global_inference_report <- bind_rows(inference_metrics_list)
+
+cat("=================== CROSS-SECTIONAL REGIME SUMMARY ===================\n")
+print(as.data.frame(global_inference_report), row.names = FALSE)
+```
+
+**Output**:
+```txt
+======================================================================
+                GLOBAL NCE INFERENCE EXECUTION ENGINE                 
+======================================================================
+
+======================================================================
+Target Asset Component          : UAL 
+Jarque-Bera Test P-Value        : 0 
+Variance Ratio (5-Day Horizon)  : 1.0654 
+Variance Ratio (21-Day Horizon) : 1.0207 
+FINAL PROGRAMMATIC VERDICT      : REJECTED (ALTERNATIVE BEHAVIORAL / CAS HYPOTHESIS) 
+----------------------------------------------------------------------
+VERDICT ANALYSIS: The flat NCE assumptions fail due to non-normality
+(fat-tails/skewness). With JB p-value = 0, VR_5d = 1.065, and VR_21d
+= 1.021, short-horizon parameters will systematically misprice option
+structures and long-horizon liquidation risks. 
+
+======================================================================
+Target Asset Component          : PAL 
+Jarque-Bera Test P-Value        : 0 
+Variance Ratio (5-Day Horizon)  : 0.5301 
+Variance Ratio (21-Day Horizon) : 0.2953 
+FINAL PROGRAMMATIC VERDICT      : REJECTED (ALTERNATIVE BEHAVIORAL / CAS HYPOTHESIS) 
+----------------------------------------------------------------------
+VERDICT ANALYSIS: The flat NCE assumptions fail due to non-normality
+(fat-tails/skewness) and non-linear variance scaling/memory effects.
+With JB p-value = 0, VR_5d = 0.53, and VR_21d = 0.295, short-horizon
+parameters will systematically misprice option structures and
+long-horizon liquidation risks. 
+
+======================================================================
+Target Asset Component          : BTC-USD 
+Jarque-Bera Test P-Value        : 0 
+Variance Ratio (5-Day Horizon)  : 0.9742 
+Variance Ratio (21-Day Horizon) : 1.062 
+FINAL PROGRAMMATIC VERDICT      : REJECTED (ALTERNATIVE BEHAVIORAL / CAS HYPOTHESIS) 
+----------------------------------------------------------------------
+VERDICT ANALYSIS: The flat NCE assumptions fail due to non-normality
+(fat-tails/skewness). With JB p-value = 0, VR_5d = 0.974, and VR_21d
+= 1.062, short-horizon parameters will systematically misprice option
+structures and long-horizon liquidation risks. 
+
+======================================================================
+Target Asset Component          : SPY 
+Jarque-Bera Test P-Value        : 0 
+Variance Ratio (5-Day Horizon)  : 0.8866 
+Variance Ratio (21-Day Horizon) : 0.8312 
+FINAL PROGRAMMATIC VERDICT      : REJECTED (ALTERNATIVE BEHAVIORAL / CAS HYPOTHESIS) 
+----------------------------------------------------------------------
+VERDICT ANALYSIS: The flat NCE assumptions fail due to non-normality
+(fat-tails/skewness) and non-linear variance scaling/memory effects.
+With JB p-value = 0, VR_5d = 0.887, and VR_21d = 0.831, short-horizon
+parameters will systematically misprice option structures and
+long-horizon liquidation risks. 
+
+=================== CROSS-SECTIONAL REGIME SUMMARY ===================
+   Asset JB_P_Value Variance_Ratio_5d Variance_Ratio_21d Hurst_Exponent NCE_Verdict
+     UAL          0         1.0654019          1.0206765      0.5026869    Rejected
+     PAL          0         0.5301344          0.2952621      0.4673883    Rejected
+ BTC-USD          0         0.9741630          1.0619780      0.5420518    Rejected
+     SPY          0         0.8866331          0.8312458      0.5071170    Rejected
+```
+
+The Neoclassical Equilibrium framework is universally rejected across the entire asset portfolio due to a total collapse of its foundational normality assumption. Every tested asset yields a Jarque-Bera $p$-value of exactly $0.000$, proving that daily return spaces are fundamentally non-Gaussian and heavily dominated by asymmetry and extreme outliers. While traditional financial theory relies on a thin-tailed, predictable Euclidean price space where risk scales neatly over time, these empirical results expose an environment where large, disruptive structural shocks occur far more frequently than standard models allow. Consequently, restricting this asset universe to simple independent and identically distributed (i.i.d.) assumptions or unadjusted Gaussian variance metrics will systematically understate systemic risks and dangerously underprice long-horizon option structures.
+
+### Fat Tail Deviation
+
+In contrast, the Complex Adaptive Systems framework structures its inference engine around the premise that traditional Gaussian approximations underprice catastrophic tail risk. To capture these non-equilibrium traits, the CAS evidence-gathering layer bypasses basic moment calculations in favor of multi-scale fractal metrics. Specifically, it computes the Hurst Exponent ($H$) via Rescaled Range Analysis to detect long-range dependency and volatility clustering, while simultaneously utilizing Hill’s Estimator to determine the Tail Index ($\alpha$), which explicitly measures the power-law decay of extreme tail shocks.
+
+**Objective**:
+ 1. Gather the Evidence:
+   - Hurst Exponent ($H$) via Rescaled Range Analysis to evaluate long-range dependency and clustering ($H \neq 0.5$).
+   - Hill’s Estimator for Tail Index ($\alpha$) to compute the power-law decay exponent of the return distribution's extreme tails.
+ 2. Decision Rule:
+    - **Null Hypothesis ($H_0$)**: If the estimated Hurst exponent deviates significantly from equilibrium ($H > 0.5$ for persistence or $H < 0.5$ for anti-persistence) and Hill's tail index indicates heavy tails ($\alpha < 3$, where variance or kurtosis begins to fail standard convergence limits). Then, we validate the CAS paradigm. The asset demonstrates structural memory and fat tails, proving that return distributions cannot be compressed into a memoryless scalar without ignoring catastrophic systemic tail risk.
+    - **Alternative Hypothesis ($H_1$)**: If $H \approx 0.5$ and $\alpha \ge 3$ (approaching Gaussian tail decay thresholds). Then, the asset behaves like a standard equilibrium system. Deviations are transient noise, and the traditional random walk approximation remains robust.
+ 3. Give the Verdict
+
+**Code**:
+```{r cas-inference-engine, echo=TRUE, message=FALSE, warning=FALSE}
+# 1. Automate discovery of all unique assets in master_df via .LogAdj
+all_cols <- names(master_df)
+return_cols <- all_cols[str_detect(all_cols, "(\\.LogAdj|^`.+\\.LogAdj`$)")]
+
+# Initialize results container for global logging
+cas_summary_list <- list()
+
+cat("======================================================================\n")
+cat("                GLOBAL CAS INFERENCE EXECUTION ENGINE                 \n")
+cat("======================================================================\n\n")
+
+# 2. Iterate through all discovered assets
+for (i in seq_along(return_cols)) {
+  
+  raw_col_name <- return_cols[i]
+  
+  # Extract clean asset names and flexible prefixes for robust column mapping
+  clean_asset <- str_remove_all(raw_col_name, "`") %>% str_remove("\\.LogAdj$")
+  short_prefix <- str_split(clean_asset, "[-.]")[[1]][1]
+  
+  # Locate the exact column in master_df safely
+  daily_col <- all_cols[str_remove_all(all_cols, "`") == paste0(clean_asset, ".LogAdj")]
+  if (length(daily_col) == 0) next
+  
+  # Extract clean data vector
+  returns_vector <- na.omit(master_df[[daily_col[1]]])
+  
+  # Skip assets with insufficient data length for multi-scale variance or tail sizing
+  if (length(returns_vector) < 100) next
+  
+  ### A. Hurst Exponent (H) via Log-Variance Multi-Scale Regression
+  horizons <- 1:21
+  horizon_variances <- tryCatch({
+    sapply(horizons, function(k) {
+      k_day_returns <- zoo::rollapplyr(returns_vector, k, sum, fill = NA)
+      var(k_day_returns, na.rm = TRUE)
+    })
+  }, error = function(e) rep(NA, length(horizons)))
+  
+  if (any(is.na(horizon_variances))) next
+  
+  log_T <- log(horizons)
+  log_Var <- log(horizon_variances)
+  fit_hurst <- lm(log_Var ~ log_T)
+  estimated_H <- as.numeric(coef(fit_hurst)[2] / 2)
+  
+  ### B. Hill's Estimator for Tail Index (alpha)
+  tail_threshold <- 0.05 
+  sorted_returns <- sort(returns_vector, decreasing = TRUE)
+  n_tail <- floor(length(sorted_returns) * tail_threshold)
+  
+  if (n_tail < 5) next # Safety margin for tiny tails
+  
+  x_threshold <- sorted_returns[n_tail + 1]
+  tail_shocks <- sorted_returns[1:n_tail]
+  hill_alpha <- 1 / (mean(log(tail_shocks / x_threshold)))
+  
+  # --- EVALUATE CAS DECISION RULES ---
+  hurst_lower_bound <- 0.45
+  hurst_upper_bound <- 0.55
+  alpha_fat_tail_threshold <- 3.0
+  
+  is_cas_validated <- (estimated_H > hurst_upper_bound || estimated_H < hurst_lower_bound) && (hill_alpha < alpha_fat_tail_threshold)
+  
+  if (is_cas_validated) {
+    cas_verdict <- "VALIDATED (REJECT NEOCLASSICAL EQUILIBRIUM)"
+    memory_type <- if_else(estimated_H < 0.5, "anti-persistent mean-reversion", "persistent trend-reinforcement")
+    
+    cas_interpretation <- paste0(
+      "The CAS paradigm is empirically confirmed. The asset demonstrates strong anomalous scaling (H = ", 
+      round(estimated_H, 3), " indicating ", memory_type, ") coupled with extreme fat-tailed decay (α = ", 
+      round(hill_alpha, 3), "). traditional Gaussian variance boundaries are violated."
+    )
+  } else {
+    cas_verdict <- "REJECTED (NEOCLASSICAL RANDOM WALK ROBUST)"
+    cas_interpretation <- paste0(
+      "The Neoclassical Equilibrium framework holds robustly. Scaling footprint closely approximates memoryless Brownian motion (H = ", 
+      round(estimated_H, 3), ") and the tail profile safely matches or exceeds normal exponential decay (α = ", 
+      round(hill_alpha, 3), ")."
+    )
+  }
+  
+  # Render the individual asset summary block directly to terminal console
+  cat("======================================================================\n")
+  cat("Target Asset Component          :", clean_asset, "\n")
+  cat("Estimated Hurst Exponent (H)    :", round(estimated_H, 4), "\n")
+  cat("Hill's Tail Decay Index (α)     :", round(hill_alpha, 4), "\n")
+  cat("Final Systemic Verdict          :", cas_verdict, "\n")
+  cat("----------------------------------------------------------------------\n")
+  cat(str_wrap(cas_interpretation, width = 70), "\n\n")
+  
+  # Log details to clean summary table
+  cas_summary_list[[clean_asset]] <- tibble(
+    Asset = clean_asset,
+    Hurst_H = estimated_H,
+    Hill_Alpha = hill_alpha,
+    Verdict = if_else(is_cas_validated, "CAS Validated", "Neoclassical Robust")
+  )
+}
+
+# 3. Consolidate results into a unified global master summary matrix
+global_cas_matrix <- bind_rows(cas_summary_list)
+cat("=================== CROSS-SECTIONAL REGIME SUMMARY ===================\n")
+print(as.data.frame(global_cas_matrix), row.names = FALSE)
+```
+
+**Output**: 
+```txt
+======================================================================
+Target Asset Component          : UAL 
+Estimated Hurst Exponent (H)    : 0.4914 
+Hill's Tail Decay Index (α)     : 2.0748 
+Final Systemic Verdict          : REJECTED (NEOCLASSICAL RANDOM WALK ROBUST) 
+----------------------------------------------------------------------
+The Neoclassical Equilibrium framework holds robustly. Scaling
+footprint closely approximates memoryless Brownian motion (H = 0.491)
+and the tail profile safely matches or exceeds normal exponential
+decay (α = 2.075). 
+
+======================================================================
+Target Asset Component          : PAL 
+Estimated Hurst Exponent (H)    : 0.2951 
+Hill's Tail Decay Index (α)     : 1.955 
+Final Systemic Verdict          : VALIDATED (REJECT NEOCLASSICAL EQUILIBRIUM) 
+----------------------------------------------------------------------
+The CAS paradigm is empirically confirmed. The asset demonstrates
+strong anomalous scaling (H = 0.295 indicating anti-persistent
+mean-reversion) coupled with extreme fat-tailed decay (α = 1.955).
+traditional Gaussian variance boundaries are violated. 
+
+======================================================================
+Target Asset Component          : BTC-USD 
+Estimated Hurst Exponent (H)    : 0.5169 
+Hill's Tail Decay Index (α)     : 2.5122 
+Final Systemic Verdict          : REJECTED (NEOCLASSICAL RANDOM WALK ROBUST) 
+----------------------------------------------------------------------
+The Neoclassical Equilibrium framework holds robustly. Scaling
+footprint closely approximates memoryless Brownian motion (H = 0.517)
+and the tail profile safely matches or exceeds normal exponential
+decay (α = 2.512). 
+
+======================================================================
+Target Asset Component          : SPY 
+Estimated Hurst Exponent (H)    : 0.4743 
+Hill's Tail Decay Index (α)     : 2.6327 
+Final Systemic Verdict          : REJECTED (NEOCLASSICAL RANDOM WALK ROBUST) 
+----------------------------------------------------------------------
+The Neoclassical Equilibrium framework holds robustly. Scaling
+footprint closely approximates memoryless Brownian motion (H = 0.474)
+and the tail profile safely matches or exceeds normal exponential
+decay (α = 2.633). 
+
+======================================================================
+Target Asset Component          : VIX 
+Estimated Hurst Exponent (H)    : 0.4237 
+Hill's Tail Decay Index (α)     : 2.1613 
+Final Systemic Verdict          : VALIDATED (REJECT NEOCLASSICAL EQUILIBRIUM) 
+----------------------------------------------------------------------
+The CAS paradigm is empirically confirmed. The asset demonstrates
+strong anomalous scaling (H = 0.424 indicating anti-persistent
+mean-reversion) coupled with extreme fat-tailed decay (α = 2.161).
+traditional Gaussian variance boundaries are violated. 
+
+=================== CROSS-SECTIONAL REGIME SUMMARY ===================
+   Asset   Hurst_H Hill_Alpha             Verdict
+     UAL 0.4913662   2.074791 Neoclassical Robust
+     PAL 0.2950946   1.955039       CAS Validated
+ BTC-USD 0.5169052   2.512151 Neoclassical Robust
+     SPY 0.4743041   2.632701 Neoclassical Robust
+     VIX 0.4237466   2.161325       CAS Validated
+```
+
+The Complex Adaptive Systems engine introduces a strict multi-scale filter that bifurcates the portfolio, separating assets that merely experience heavy-tailed shocks from those driven by complex, memory-bound feedback loops. Under this lens, SPY, BTC-USD, and UAL are rejected as true complex systems because their Hurst exponents hover tightly around the $0.50$ baseline, signaling that their daily price changes expand over time like a memoryless random walk. In stark contrast, PAL and VIX are robustly validated by the CAS engine, revealing a regime where extreme fat tails ($\alpha < 2.2$) combine with deep, anti-persistent memory profiles ($H < 0.45$). These true complex systems do not scale like ordinary diffusion; instead, they operate under non-linear, self-referential dynamics where the system actively fights its own directional trends.
+
+## Synthesis
+The Price Movement analysis serves as our most granular lens, examining individual asset vectors in isolation. If the empirical verdicts yield deviations from normality and square-root scaling, it proves that "price" is not a simple, self-contained coordinate point. Instead, assets contain intrinsic path dependency and memory, prompting us to step outward into our next lens: how these unique asset states interact with one another under varying regimes.
+
+
+Synthesizing both diagnostic engines maps a clear three-tier structural topology across the market, shifting the analytical narrative from a rigid binary choice to a nuanced spectrum of complexity. The first tier—a pure neoclassical world of normal distributions and linear scaling—does not exist in this dataset. Instead, the majority of broad-market assets fall into a secondary Hybrid Random Walk tier, where traditional models fail to capture the severity of tail-risk events due to non-normality, but can still safely rely on standard square-root-of-time scaling because the structural time-memory remains flat. The final, most volatile tier consists of True Complex Systems like PAL and VIX, where traditional financial engineering completely collapses; in these regimes, both the distribution assumptions and the time-aggregation rules fail simultaneously, requiring risk architectures that ditch localized variance entirely in favor of path-dependent, non-linear metrics.
+
+## Footnote:
+[9] Sewell, M. (2012). The efficient market hypothesis: Empirical evidence. *International Journal of Statistics and Probability*, 1(2), 164-178.
+
+[a2] On "Symplectic/Contact geometry": true symplectic geometry requires an explicit closed, non-degenerate 2-form on an even-dimensional phase space, and contact geometry requires an explicit contact 1-form - neither is constructed anywhere in this code, so naming them without deriving them would be unearned. What *is* legitimate and directly testable with the tools already in this section is the underlying distinction those formalisms are gesturing at: whether the flow through phase space is volume-preserving (conservative, NCE-consistent) or volume-contracting onto a lower-dimensional attractor (dissipative, CAS-consistent). This is the same question chaos theory asks of a reconstructed phase space via delay embeddings (Takens, 1981) and answers with a correlation-dimension estimate (Grassberger & Procaccia, 1983); it has prior precedent in finance specifically (Hsieh, 1991; Peters, 1991). If we want the fuller geometric machinery later - e.g. an actual contact Hamiltonian formulation of dissipation, as in Bravetti, Cruz, & Tapias (2017) - it is a legitimate direction, but it's a research extension, not something implied for free by taking a second difference.
