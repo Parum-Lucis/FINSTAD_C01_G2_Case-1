@@ -364,7 +364,16 @@ for (col in target_cols) {
 # One box plot per instrument, showing that series' own return spread/outliers.
 # Zoomed to 3x IQR beyond Q1/Q3 via coord_cartesian() for visualization purposes, but all of data is still included in computation.
 for (col in target_cols) {
-  box_data <- master_df %>% select(Date, Value = all_of(col)) %>% filter(!is.na(Value))
+  if (col %in% c("CPIAUCSL", "FEDFUNDS")) { # cleans CPI and FEDFUNDS data since they are monthly, so they are treated differently
+    box_data <- df_list[[col]] %>%
+      arrange(Date) %>%
+      transmute(Date, Value = c(NA, diff(log(.data[[col]])))) %>%
+      filter(!is.na(Value))
+    plot_label <- paste("Monthly Return Box Plot:", col, "(2020 - 2025)")
+  } else {
+    box_data <- master_df %>% select(Date, Value = all_of(col)) %>% filter(!is.na(Value))
+    plot_label <- paste("Return Box Plot:", col, "(2020 - 2025)")
+  }
 
   q1 <- quantile(box_data$Value, 0.25, na.rm = TRUE)
   q3 <- quantile(box_data$Value, 0.75, na.rm = TRUE)
@@ -376,7 +385,7 @@ for (col in target_cols) {
     coord_cartesian(ylim = c(q1 - 3 * iqr, q3 + 3 * iqr)) +
     theme_minimal() +
     labs(
-      title = paste("Return Box Plot:", col, "(2020 - 2025)"),
+      title = plot_label,
       subtitle = "Black line = median, gold diamond = mean",
       x = NULL,
       y = "Log Return"
@@ -389,6 +398,8 @@ for (col in target_cols) {
   print(box_plot)
 }
 ```
+Forward-filling PAL's halted trading dates introduces extra zero-return days, which compresses the interquartile range: IQR narrows from 0.0173 in the halt-masked version to 0.0130 in the naive forward-filled version (a ~25% reduction), while the median stays at 0 in both.
+
 ```{r name-df-list}
 # df_list was built in instrument order in `convert-to-df` (pre full_join, pre fill).
 # Name it so individual per-instrument tibbles can be pulled out by ticker for the
