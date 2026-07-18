@@ -244,6 +244,17 @@ master_df <- master_df %>%
 explore_instruments(instruments, master_df)
 ```
 
+```{r bea-pal-masked-column}
+# another column is created `PAL_masked.LogAdj` where its halted dates are masked to be NA
+# this is based on PAL.LogAdj which all missing dates were forward filled,
+# they will exist alongside each other, useful for more analysis later.
+master_df <- master_df %>%
+  mutate(PAL_masked.LogAdj = if_else(in_pal_halt(Date), NA_real_, PAL.LogAdj))
+
+cat("PAL.LogAdj non-NA:", sum(!is.na(master_df$PAL.LogAdj)),
+    "| PAL_masked.LogAdj non-NA:", sum(!is.na(master_df$PAL_masked.LogAdj)), "\n")
+```
+
 ```{r function-descriptive-statistics}
 analyze_instrument <- function(df, col_name) {
   inst_data <- df %>%
@@ -302,9 +313,10 @@ analyze_instrument <- function(df, col_name) {
 }
 
 target_cols <- c(
-  "UAL.LogAdj", 
-  "PAL.LogAdj", 
-  "BTC-USD.LogAdj", 
+  "UAL.LogAdj",
+  "PAL.LogAdj",
+  "PAL_masked.LogAdj",
+  "BTC-USD.LogAdj",
   "SPY.LogAdj", 
   "VIX.LogAdj", 
   "DGS10", 
