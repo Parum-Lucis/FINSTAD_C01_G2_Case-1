@@ -190,6 +190,11 @@ in_pal_halt <- function(dates) {
 }
 ```
 
+```{r bea-master-df-levels-snapshot}
+# Snapshot before log-returns converts every column to a return, so the raw levels survive for the values time series.
+master_df_levels <- master_df
+```
+
 ```{r log-returns}
 master_df <- master_df %>%
   mutate(across(
@@ -256,11 +261,18 @@ cat("PAL.LogAdj non-NA:", sum(!is.na(master_df$PAL.LogAdj)),
 ```
 
 ```{r function-descriptive-statistics}
-analyze_instrument <- function(df, col_name) {
+# Maps a return column name back to its raw-level column name in master_df_levels; PAL_masked.LogAdj is skipped since it has no distinct level series of its own.
+level_col_name <- function(ret_col) {
+  if (ret_col == "PAL_masked.LogAdj") return(NA_character_)
+  if (str_detect(ret_col, "\\.LogAdj$")) return(str_replace(ret_col, "\\.LogAdj$", ".Adjusted"))
+  return(ret_col)  # DGS10/FEDFUNDS/CPIAUCSL/DCOILWTICO keep the same name; only their values changed
+}
+
+analyze_instrument <- function(df, levels_df, col_name) {
   inst_data <- df %>%
     select(Date, Value = all_of(col_name)) %>%
     filter(!is.na(Value))
-  
+
   summary_stats <- tibble(
     Instrument = col_name,
     Mean = mean(inst_data$Value),
@@ -270,18 +282,36 @@ analyze_instrument <- function(df, col_name) {
     Min = min(inst_data$Value),
     Max = max(inst_data$Value),
     Range = Max - Min,
-    Skewness = skewness(inst_data$Value), 
+    Skewness = skewness(inst_data$Value),
     Kurtosis = kurtosis(inst_data$Value)
   ) %>%
     mutate(across(where(is.numeric), ~round(., 4)))
-  
+
   cat("\n======================================================\n")
   cat("### Daily Summary Statistics:", col_name, "\n")
   cat("======================================================\n")
   print(summary_stats)
   cat("\n")
-  
-  line_plot <- ggplot(inst_data, aes(x = Date, y = Value)) +
+
+  lvl_col <- level_col_name(col_name)
+  if (!is.na(lvl_col) && lvl_col %in% names(levels_df)) {
+    values_data <- levels_df %>% select(Date, Value = all_of(lvl_col)) %>% filter(!is.na(Value))
+    values_plot <- ggplot(values_data, aes(x = Date, y = Value)) +
+      geom_line(color = "darkgreen", alpha = 0.8) +
+      theme_minimal() +
+      labs(
+        title = paste("Value Time Series:", lvl_col, "(2020 - 2025)"),
+        x = "Date",
+        y = "Value"
+      ) +
+      theme(
+        plot.title = element_text(face = "bold", size = 14),
+        axis.title = element_text(face = "bold")
+      )
+    print(values_plot)
+  }
+
+  return_plot <- ggplot(inst_data, aes(x = Date, y = Value)) +
     geom_line(color = "darkblue", alpha = 0.8) +
     theme_minimal() +
     labs(
@@ -293,7 +323,7 @@ analyze_instrument <- function(df, col_name) {
       plot.title = element_text(face = "bold", size = 14),
       axis.title = element_text(face = "bold")
     )
-  
+
   dist_plot <- ggplot(inst_data, aes(x = Value)) +
     geom_histogram(aes(y = after_stat(density)), bins = 50, fill = "steelblue", color = "white", alpha = 0.7) +
     geom_density(color = "darkred", linewidth = 1) +
@@ -307,8 +337,8 @@ analyze_instrument <- function(df, col_name) {
       plot.title = element_text(face = "bold", size = 14),
       axis.title = element_text(face = "bold")
     )
-  
-  print(line_plot)
+
+  print(return_plot)
   print(dist_plot)
 }
 
@@ -317,16 +347,16 @@ target_cols <- c(
   "PAL.LogAdj",
   "PAL_masked.LogAdj",
   "BTC-USD.LogAdj",
-  "SPY.LogAdj", 
-  "VIX.LogAdj", 
-  "DGS10", 
-  "FEDFUNDS", 
+  "SPY.LogAdj",
+  "VIX.LogAdj",
+  "DGS10",
+  "FEDFUNDS",
   "CPIAUCSL",
   "DCOILWTICO"
 )
 
 for (col in target_cols) {
-  analyze_instrument(master_df, col)
+  analyze_instrument(master_df, master_df_levels, col)
 }
 ```
 ```{r name-df-list}
