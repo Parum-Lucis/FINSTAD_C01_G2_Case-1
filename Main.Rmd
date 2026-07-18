@@ -630,3 +630,106 @@ cat("Strict inner_join correlation:", round(strict_cor, 4), "| N =", nrow(ual_pa
 ```
 
 **Financial Interpretation:** The naive version keeps a `full_join` across both calendars and forward-fills every gap, including the 285-day suspension, so N=1539 rows go into the naive correlation, many of them repeated/fabricated values rather than real paired price movements, pulling the coefficient toward whatever a flat series correlates at (near zero, by construction). The strict `inner_join` version drops to N=1206, using only days both stocks actually traded, so every observation is a real, paired price movement. This is the same deflation mechanism as Investigation 1, demonstrated on a pairwise statistic instead of a univariate one, and it's the direct justification for choosing `inner_join` over `full_join` for the BTC/UAL/PAL correlation work in `bea-innerjoin`.
+
+## SQL Investigation 6: Do UAL and PAL Behave Differently in High-Inflation Periods?
+
+**Objective:** Determine whether United and Philippine Airlines perform differently during periods of high inflation versus periods of low or moderate inflation.
+
+```{r bea-sql6}
+cpi_daily <- tibble(Date = seq(min(df_list[["CPIAUCSL"]]$Date), max(fuel_leftjoin_df$Date), by = "day")) %>%
+  left_join(
+    df_list[["CPIAUCSL"]] %>% arrange(Date) %>% mutate(CPI_YoY = CPIAUCSL / lag(CPIAUCSL, 12) - 1) %>% select(Date, CPI_YoY),
+    by = "Date"
+  ) %>%
+  arrange(Date) %>%
+  fill(CPI_YoY, .direction = "down")
+
+label_inflation <- function(df) {
+  df %>%
+    left_join(cpi_daily, by = "Date") %>%
+    filter(!is.na(CPI_YoY)) %>%
+    mutate(inflation_regime = if_else(CPI_YoY > 0.04, "High inflation (>4% YoY)", "Low/moderate inflation (<=4% YoY)"))
+}
+
+ual_inflation_df <- fuel_leftjoin_df %>% label_inflation()
+pal_inflation_df <- fuel_leftjoin_df_masked %>% label_inflation()
+
+ual_inflation_summary <- bind_rows(
+  ual_inflation_df %>% mutate(inflation_regime = "Overall (all regimes)"),
+  ual_inflation_df
+) %>%
+  group_by(inflation_regime) %>%
+  summarise(n_days_ual = n(), mean_UAL_ret = round(mean(UAL_ret), 5), sd_UAL_ret = round(sd(UAL_ret), 5), .groups = "drop")
+
+pal_inflation_summary <- bind_rows(
+  pal_inflation_df %>% mutate(inflation_regime = "Overall (all regimes)"),
+  pal_inflation_df
+) %>%
+  group_by(inflation_regime) %>%
+  summarise(n_days_pal = n(), mean_PAL_ret = round(mean(PAL_ret), 5), sd_PAL_ret = round(sd(PAL_ret), 5), .groups = "drop")
+
+inflation_summary <- ual_inflation_summary %>%
+  left_join(pal_inflation_summary, by = "inflation_regime") %>%
+  arrange(inflation_regime)
+
+print(inflation_summary, width = Inf)
+```
+
+**Financial Interpretation:** UAL's average daily return flips from +0.15% when inflation is low or moderate to -0.04% once inflation climbs above 4%. The swing from positive to negative lines up with intuition, that higher inflation cuts into consumer travel budgets while also raising UAL's operating costs like fuel, wages, and leases. PAL doesn't show the same pattern; its average return is negative in both regimes (-0.07% and -0.03%), so inflation on its own doesn't appear to be a major driver for PAL specifically. Another important thing to note is how PAL's high-inflation bucket only has 349 real trading days against UAL's 545, since that stretch overlaps heavily with the suspension, so there's less to go on there. Volatility barely changes for either airline across the two regimes, so the real story is a shift in average return, not the stock getting riskier.
+
+## SQL Investigation 7: Does the Fed Funds Rate Environment Change UAL's and PAL's Oil-Beta?
+
+**Objective:** Determine how the prevailing interest rate environment (near-zero, hiking, or restrictive) affects both airlines' stock performance and their sensitivity to oil prices.
+
+```{r bea-sql7}
+fedfunds_daily <- tibble(Date = seq(min(df_list[["FEDFUNDS"]]$Date), max(fuel_leftjoin_df$Date), by = "day")) %>%
+  left_join(df_list[["FEDFUNDS"]] %>% select(Date, FedFunds = FEDFUNDS), by = "Date") %>%
+  arrange(Date) %>%
+  fill(FedFunds, .direction = "down")
+
+label_rate_regime <- function(df) {
+  df %>%
+    left_join(fedfunds_daily, by = "Date") %>%
+    filter(!is.na(FedFunds)) %>%
+    mutate(rate_regime = case_when(
+      FedFunds < 1 ~ "1. Near-zero (<1%)",
+      FedFunds < 4 ~ "2. Hiking (1-4%)",
+      TRUE ~ "3. Restrictive (>4%)"
+    ))
+}
+
+ual_rate_df <- fuel_leftjoin_df %>% label_rate_regime()
+pal_rate_df <- fuel_leftjoin_df_masked %>% label_rate_regime()
+
+ual_rate_summary <- bind_rows(
+  ual_rate_df %>% mutate(rate_regime = "Overall (all regimes)"),
+  ual_rate_df
+) %>%
+  group_by(rate_regime) %>%
+  summarise(
+    n_days_ual = n(),
+    mean_UAL_ret = round(mean(UAL_ret), 5),
+    UAL_oil_beta = round(cov(UAL_ret, WTI_ret, use = "complete.obs") / var(WTI_ret, na.rm = TRUE), 4),
+    .groups = "drop"
+  )
+
+pal_rate_summary <- bind_rows(
+  pal_rate_df %>% mutate(rate_regime = "Overall (all regimes)"),
+  pal_rate_df
+) %>%
+  group_by(rate_regime) %>%
+  summarise(
+    n_days_pal = n(),
+    mean_PAL_ret = round(mean(PAL_ret), 5),
+    PAL_oil_beta = round(cov(PAL_ret, WTI_ret, use = "complete.obs") / var(WTI_ret, na.rm = TRUE), 4),
+    .groups = "drop"
+  )
+
+rate_summary <- ual_rate_summary %>%
+  left_join(pal_rate_summary, by = "rate_regime") %>%
+  arrange(rate_regime)
+
+print(rate_summary, width = Inf)
+```
+
+**Financial Interpretation:** The overall row lines up exactly with what Investigation 2 already found (+0.104 for UAL, all 1504 rows), which is a good check that the regime split isn't dropping or duplicating anything. Break it out by Fed policy stance showcases how UAL's relationship with oil fades: +0.131 when rates are near zero, down to +0.074 during the hiking phase, and basically flat at -0.009 once policy turns restrictive. So oil and UAL's stock gradually stop moving together as the Fed tightens, rather than starting to move in opposite directions. PAL tells almost the same story in reverse: its beta goes from -0.095 (near-zero) to -0.059 (hiking) to -0.015 (restrictive), meaning its fuel-cost relationship is strongest exactly when money is cheap and weakens as rates climb. Put the two together and both airlines' link to oil shrinks as rates rise, regardless of whether that link starts positive or negative.
