@@ -359,6 +359,36 @@ for (col in target_cols) {
   analyze_instrument(master_df, master_df_levels, col)
 }
 ```
+
+```{r bea-return-boxplot-comparison}
+# One box plot per instrument, showing that series' own return spread/outliers.
+# Zoomed to 3x IQR beyond Q1/Q3 via coord_cartesian() for visualization purposes, but all of data is still included in computation.
+for (col in target_cols) {
+  box_data <- master_df %>% select(Date, Value = all_of(col)) %>% filter(!is.na(Value))
+
+  q1 <- quantile(box_data$Value, 0.25, na.rm = TRUE)
+  q3 <- quantile(box_data$Value, 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+
+  box_plot <- ggplot(box_data, aes(x = "", y = Value)) +
+    geom_boxplot(fill = "steelblue", alpha = 0.6, outlier.color = "darkred", outlier.alpha = 0.4) +
+    stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "gold", color = "black") +
+    coord_cartesian(ylim = c(q1 - 3 * iqr, q3 + 3 * iqr)) +
+    theme_minimal() +
+    labs(
+      title = paste("Return Box Plot:", col, "(2020 - 2025)"),
+      subtitle = "Black line = median, gold diamond = mean",
+      x = NULL,
+      y = "Log Return"
+    ) +
+    theme(
+      plot.title = element_text(face = "bold", size = 14),
+      axis.title = element_text(face = "bold")
+    )
+
+  print(box_plot)
+}
+```
 ```{r name-df-list}
 # df_list was built in instrument order in `convert-to-df` (pre full_join, pre fill).
 # Name it so individual per-instrument tibbles can be pulled out by ticker for the
