@@ -476,6 +476,7 @@ cat("Routine PSE-holiday mismatch accounts for only", nrow(holiday_gap_days), "d
 ## SQL Investigation 1: Does Forward-Filling PAL's Suspension Bias Its Return Statistics?
 
 **Objective:** Quantifies the how forward-filling PAL's 285-day suspension affects its measured return distribution, compared to excluding (masking) the halt window. Reuses the two parallel PAL series already built above (`fuel_leftjoin_df` naive, `fuel_leftjoin_df_masked` corrected).
+**Objective:** Determine whether treating PAL's 285-day trading suspension as if its price simply stayed unchanged distorts its measured returns and volatility, compared to properly excluding that period from the calculation.
 
 ```{r bea-sql1}
 pal_stats_comparison <- bind_rows(
@@ -508,6 +509,7 @@ This mirrors a well-documented problem in the finance literature: stale/non-sync
 ## SQL Investigation 2: Which Airline Is More Exposed to Oil: UAL or PAL?
 
 **Objective:** Compare United Airlines' and Philippine Airlines' sensitivity to WTI crude oil returns, using the corrected (halt-masked) PAL series, to determine which airline's stock carries more fuel-cost risk.
+**Objective:** Determine which airline, United or Philippine Airlines, carries more fuel-cost risk by comparing their sensitivity to crude oil price movements.
 
 ```{r bea-sql2}
 oil_direction_summary <- fuel_leftjoin_df_masked %>%
@@ -533,6 +535,7 @@ cat("PAL oil-beta:", round(pal_oil_beta_masked, 4), "| p =", round(pal_oil_p_mas
 ## SQL Investigation 3: The Ukraine Invasion Oil Shock
 
 **Objective:** Test whether UAL's oil-sensitivity shifts during the acute Feb 24-Mar 8, 2022 shock (WTI spiked from ~$92.77 to a $123.64 peak, +33%) relative to its full-sample beta. (Note: PAL has zero data for this exact window.)
+**Objective:** Examine how United Airlines' sensitivity to oil prices behaved during the acute 2022 Russia-Ukraine oil shock (February 24-March 8), and assess the impact of Philippine Airlines being unable to trade during this same window.
 
 ```{r bea-sql3}
 ukraine_shock_df_all_ual <- fuel_leftjoin_df %>%
@@ -561,6 +564,7 @@ print(shock_vs_full, width = Inf)
 ## SQL Investigation 4: Is UAL's Oil-Beta a Stable Relationship, or Just the Ukraine Shock?
 
 **Objective:** Split the sample into pre-shock, shock-era, and recovery sub-periods and recompute UAL's and PAL's oil-beta in each, to test whether Investigation 2's relationship is a structural feature or an artifact of one event. UAL is grouped from the naive `fuel_leftjoin_df` (it has no gaps to mask, and restricting it to PAL's available days would silently exclude the actual shock dates, since they fall inside PAL's halt window); PAL is grouped from `fuel_leftjoin_df_masked`. The two are joined back together by period for a side-by-side table.
+**Objective:** Determine whether the fuel-cost relationship identified for United and Philippine Airlines is a stable, ongoing pattern or simply a result of the 2022 oil shock, by comparing pre-shock, shock-era, and recovery periods.
 
 ```{r bea-sql4}
 period_label <- function(d) case_when(
@@ -599,6 +603,7 @@ print(period_beta, width = Inf)
 ## SQL Investigation 5: How Much Does PAL's Stagnant Period Deflate the UAL-PAL Correlation?
 
 **Objective:** Directly measure how much a naive `full_join` + forward-fill deflates the UAL-PAL return correlation compared to a strict `inner_join`, closing the loop back to Investigation 1's methodology point and justifying `inner_join`'s use in `bea-innerjoin`.
+**Objective:** Measure how much the correlation between United and Philippine Airlines' stock returns changes depending on how the two datasets are combined.
 
 ```{r bea-sql5}
 ual_pal_fulljoin_df <- df_list[["UAL"]] %>% select(Date, UAL_Adjusted = `UAL.Adjusted`) %>%
