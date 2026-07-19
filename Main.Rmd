@@ -7,11 +7,12 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
 ```{r set-environment-dependencies}
 required_packages <- c(
-  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr","stringr", "ggplot2", "quantmod", "ggrepel","zoo", "lubridate"
+  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr","stringr", "ggplot2", "quantmod", "ggrepel","zoo", "lubridate", "corrplot", "patchwork"
 )
 
 missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
@@ -887,6 +888,37 @@ pal_fuel_model <- lm(PAL_ret ~ WTI_ret, data = fuel_leftjoin_df)
 print(summary(ual_fuel_model)$coefficients)
 print(summary(pal_fuel_model)$coefficients)
 ```
+```{r fuel-pass-through-visualization}
+plot_df <- fuel_leftjoin_df %>%
+  select(Date, WTI_ret, UAL_ret, PAL_ret) %>%
+  pivot_longer(
+    cols = c(UAL_ret, PAL_ret),
+    names_to = "Airline",
+    values_to = "Stock_Return"
+  ) %>%
+  mutate(
+    Airline = case_when(
+      Airline == "UAL_ret" ~ "United Airlines (UAL)",
+      Airline == "PAL_ret" ~ "Philippine Airlines (PAL)"
+    )
+  )
+
+ggplot(plot_df, aes(x = WTI_ret, y = Stock_Return, color = Airline)) +
+  geom_point(alpha = 0.4) +  # Alpha adds transparency to handle overlapping points
+  geom_smooth(method = "lm", se = TRUE, color = "black", linetype = "dashed") + 
+  facet_wrap(~ Airline) +
+  theme_minimal() +
+  labs(
+    title = "Fuel Pass-Through: Airline Returns vs. WTI Crude Oil",
+    subtitle = "Daily Log Returns with Fitted OLS Regression Lines",
+    x = "WTI Crude Oil Log Return",
+    y = "Airline Stock Log Return"
+  ) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold")
+  )
+```
 
 ```{r post-obs fuel-pass-through}
 ual_oil_beta <- coef(ual_fuel_model)[["WTI_ret"]]
@@ -944,6 +976,15 @@ n_btc_total <- nrow(df_list[["BTC-USD"]])
 n_common <- nrow(btc_innerjoin_df)
 cor_matrix <- cor(btc_innerjoin_df %>% select(BTC_ret, UAL_ret, PAL_ret), use = "complete.obs")
 print(round(cor_matrix, 4))
+
+corrplot(cor_matrix, 
+         method = "color",        
+         type = "lower",          
+         addCoef.col = "black",   
+         tl.col = "black",        
+         tl.srt = 0,             
+         title = "Log Return Correlations: BTC, UAL, PAL",
+         mar = c(0,0,2,0))
 ```
 
 ```{r post-obs BTC/airline correlation}
@@ -965,8 +1006,10 @@ cat("apart tests whether the suspension or routine calendar drift dominates.\n")
 ```
 
 ```{r pal-ual-gap}
-pal_gap_days <- df_list[["UAL"]] %>% select(Date) %>%
-  anti_join(df_list[["PAL"]] %>% select(Date), by = "Date")
+pal_gap_days <- df_list[["UAL"]] %>% 
+  select(Date) %>%
+  anti_join(df_list[["PAL"]] %>% select(Date), by = "Date") %>%
+  filter(Date >= as.Date("2020-01-01"))
 
 holiday_gap_days <- pal_gap_days %>% filter(!in_pal_halt(Date))
 halted_gap_days  <- pal_gap_days %>% filter(in_pal_halt(Date))
@@ -978,10 +1021,10 @@ print(holiday_gap_days, n = 10)
 ```
 
 ```{r post-ob pal-ual-gap}
-cat("Of", nrow(pal_gap_days), "total PAL gap days, which are dates that are in UAL but are not in the PAL dataset,", nrow(halted_gap_days),
+cat("Of the", nrow(pal_gap_days), "total PAL gap days, which are dates that are in UAL but are not in the PAL dataset,", nrow(halted_gap_days),
     sprintf("(%.0f%%)", 100 * nrow(halted_gap_days) / nrow(pal_gap_days)),
     "are attributable to the 285-day suspension. Note that the 285-day suspension is the total days between 2021-06-17 to 2022-03-27, which includes weekends, but because PAL and UAL does not include weekends, which is why only 196 is attributable to the suspension. \n")
-cat("Routine PSE-holiday mismatch accounts for only", nrow(holiday_gap_days), "days, which accounts for holidays starting from December 2019 to Decemer 2025. These are dates that PAL does not account for, but is included in the UAL dataset.\n")
+cat("Routine PSE-holaaiday mismatch accounts for only", nrow (holiday_gap_days), "days, which accounts for holidays starting from December 2019 to December 2025. These are dates that PAL does not account for, but is included in the UAL dataset.\n")
 ```
 
 # SQL-Based Financial Investigation
@@ -1012,6 +1055,17 @@ pal_stats_comparison <- bind_rows(
   )
 
 print(pal_stats_comparison, width = Inf)
+
+naive_returns <- fuel_leftjoin_df$PAL_ret[!is.na(fuel_leftjoin_df$PAL_ret)]
+masked_returns <- fuel_leftjoin_df_masked$PAL_ret[!is.na(fuel_leftjoin_df_masked$PAL_ret)]
+
+cat("\n--- Kolmogorov-Smirnov Test (Distribution Difference) ---\n")
+ks_result <- ks.test(naive_returns, masked_returns)
+print(ks_result)
+
+cat("\n--- F-Test for Equality of Variances (Volatility Difference) ---\n")
+var_result <- var.test(naive_returns, masked_returns)
+print(var_result)
 ```
 
 **Financial Interpretation:** Forward-filling raises PAL's share of zero-return days from 25.8% to 35.5% (about 1.4x), this pulls its standard deviation down (0.0252 to 0.0235) and inflating kurtosis (13.1 to 15.1). The halt gets recorded as "196 calm trading days" compared to "no market existed." 
@@ -1022,7 +1076,7 @@ In practical terms, anyone using the naive series to size a PAL position or esti
 
 **Objective:** Determine which airline, United or Philippine Airlines, carries more fuel-cost risk by comparing their sensitivity to crude oil price movements.
 
-```{r bea-sql2-oil-airline-exposure}
+```{r sql2-oil-airline-exposure}
 oil_direction_summary <- fuel_leftjoin_df_masked %>%
   mutate(oil_direction = if_else(WTI_ret > 0, "Oil Up", "Oil Down")) %>%
   group_by(oil_direction) %>%
@@ -1047,7 +1101,7 @@ cat("PAL oil-beta:", round(pal_oil_beta_masked, 4), "| p =", round(pal_oil_p_mas
 
 **Objective:** Examine how United Airlines' sensitivity to oil prices behaved during the acute 2022 Russia-Ukraine oil shock (February 24-March 8), and assess the impact of Philippine Airlines being unable to trade during this same window.
 
-```{r bea-sql3-Russo-Ukrainian-oil-impact}
+```{r sql3-Russo-Ukrainian-oil-impact}
 ukraine_shock_df_all_ual <- fuel_leftjoin_df %>%
   filter(between(Date, as.Date("2022-02-24"), as.Date("2022-03-08")))
 ukraine_shock_df_pal <- fuel_leftjoin_df_masked %>%
@@ -1056,16 +1110,35 @@ ukraine_shock_df_pal <- fuel_leftjoin_df_masked %>%
 cat("UAL trading days in Ukraine shock window:", nrow(ukraine_shock_df_all_ual), "\n")
 cat("Of which PAL has real (non-halted) data:", nrow(ukraine_shock_df_pal), "\n\n")
 
+lm_full <- lm(UAL_ret ~ WTI_ret, data = fuel_leftjoin_df)
+lm_shock <- lm(UAL_ret ~ WTI_ret, data = ukraine_shock_df_all_ual)
+
+get_beta_pval <- function(model) {
+  coefs <- summary(model)$coefficients
+  if (nrow(coefs) > 1) return(round(coefs[2, 4], 4)) else return(NA)
+}
+
+ttest_ual_full <- t.test(fuel_leftjoin_df$UAL_ret)
+ttest_ual_shock <- t.test(ukraine_shock_df_all_ual$UAL_ret)
+ttest_wti_full <- t.test(fuel_leftjoin_df$WTI_ret)
+ttest_wti_shock <- t.test(ukraine_shock_df_all_ual$WTI_ret)
+
 shock_vs_full <- tibble(
   Period = c("Full sample", "Ukraine shock (2022-02-24 to 2022-03-08)"),
   N = c(nrow(fuel_leftjoin_df), nrow(ukraine_shock_df_all_ual)),
-  UAL_oil_beta = c(
-    round(cov(fuel_leftjoin_df$UAL_ret, fuel_leftjoin_df$WTI_ret, use = "complete.obs") / var(fuel_leftjoin_df$WTI_ret, na.rm = TRUE), 4),
-    round(cov(ukraine_shock_df_all_ual$UAL_ret, ukraine_shock_df_all_ual$WTI_ret, use = "complete.obs") / var(ukraine_shock_df_all_ual$WTI_ret, na.rm = TRUE), 4)
-  ),
-  Mean_UAL_ret = c(round(mean(fuel_leftjoin_df$UAL_ret), 5), round(mean(ukraine_shock_df_all_ual$UAL_ret), 5)),
-  Mean_WTI_ret = c(round(mean(fuel_leftjoin_df$WTI_ret), 5), round(mean(ukraine_shock_df_all_ual$WTI_ret), 5))
+  
+  UAL_oil_beta = c(round(coef(lm_full)[2], 4), round(coef(lm_shock)[2], 4)),
+  Beta_p_value = c(get_beta_pval(lm_full), get_beta_pval(lm_shock)),
+  
+  Mean_UAL_ret = c(round(mean(fuel_leftjoin_df$UAL_ret, na.rm = TRUE), 5), 
+                   round(mean(ukraine_shock_df_all_ual$UAL_ret, na.rm = TRUE), 5)),
+  UAL_ret_p_value = c(round(ttest_ual_full$p.value, 4), round(ttest_ual_shock$p.value, 4)),
+  
+  Mean_WTI_ret = c(round(mean(fuel_leftjoin_df$WTI_ret, na.rm = TRUE), 5), 
+                   round(mean(ukraine_shock_df_all_ual$WTI_ret, na.rm = TRUE), 5)),
+  WTI_ret_p_value = c(round(ttest_wti_full$p.value, 4), round(ttest_wti_shock$p.value, 4))
 )
+
 print(shock_vs_full, width = Inf)
 ```
 
@@ -1082,12 +1155,22 @@ period_label <- function(d) case_when(
   TRUE ~ "3. Recovery (2023-2025)"
 )
 
+get_beta_pval <- function(y, x) {
+  mod_summary <- summary(lm(y ~ x)) 
+  if (nrow(mod_summary$coefficients) > 1) {
+    return(round(mod_summary$coefficients[2, 4], 4))
+  } else {
+    return(NA)
+  }
+}
+
 ual_period_beta <- fuel_leftjoin_df %>%
   mutate(period = period_label(Date)) %>%
   group_by(period) %>%
   summarise(
     n_days_ual = n(),
-    UAL_beta = round(cov(UAL_ret, WTI_ret, use = "complete.obs") / var(WTI_ret, na.rm = TRUE), 4),
+    UAL_beta = round(coef(lm(UAL_ret ~ WTI_ret))[2], 4),
+    UAL_p_value = get_beta_pval(UAL_ret, WTI_ret),
     .groups = "drop"
   )
 
@@ -1096,7 +1179,8 @@ pal_period_beta <- fuel_leftjoin_df_masked %>%
   group_by(period) %>%
   summarise(
     n_days_pal = n(),
-    PAL_beta = round(cov(PAL_ret, WTI_ret, use = "complete.obs") / var(WTI_ret, na.rm = TRUE), 4),
+    PAL_beta = round(coef(lm(PAL_ret ~ WTI_ret))[2], 4),
+    PAL_p_value = get_beta_pval(PAL_ret, WTI_ret),
     .groups = "drop"
   )
 
@@ -1135,11 +1219,48 @@ ual_pal_innerjoin_df <- df_list[["UAL"]] %>% select(Date, UAL_Adjusted = `UAL.Ad
   ) %>%
   filter(!is.na(UAL_ret), !is.na(PAL_ret))
 
-naive_cor  <- cor(ual_pal_fulljoin_df$UAL_ret, ual_pal_fulljoin_df$PAL_ret, use = "complete.obs")
-strict_cor <- cor(ual_pal_innerjoin_df$UAL_ret, ual_pal_innerjoin_df$PAL_ret, use = "complete.obs")
+naive_test <- cor.test(ual_pal_fulljoin_df$UAL_ret, ual_pal_fulljoin_df$PAL_ret, use = "complete.obs")
+strict_test <- cor.test(ual_pal_innerjoin_df$UAL_ret, ual_pal_innerjoin_df$PAL_ret, use = "complete.obs")
 
-cat("Naive full_join + fill() correlation:", round(naive_cor, 4), "| N =", nrow(ual_pal_fulljoin_df), "\n")
-cat("Strict inner_join correlation:", round(strict_cor, 4), "| N =", nrow(ual_pal_innerjoin_df), "\n")
+naive_cor  <- naive_test$estimate
+naive_pval <- naive_test$p.value
+strict_cor <- strict_test$estimate
+strict_pval <- strict_test$p.value
+
+format_pval <- function(p) { if(p < 0.001) "< 0.001" else sprintf("= %.4f", p) }
+
+cat("Naive full_join + fill() correlation:", round(naive_cor, 4), 
+    "| p-value:", format_pval(naive_pval), 
+    "| N =", nrow(ual_pal_fulljoin_df), "\n")
+cat("Strict inner_join correlation:", round(strict_cor, 4), 
+    "| p-value:", format_pval(strict_pval), 
+    "| N =", nrow(ual_pal_innerjoin_df), "\n")
+
+p1 <- ggplot(ual_pal_fulljoin_df, aes(x = UAL_ret, y = PAL_ret)) +
+  geom_point(alpha = 0.4, color = "steelblue") +
+  geom_smooth(method = "lm", color = "firebrick", linetype = "dashed", se = TRUE, alpha = 0.2) +
+  labs(
+    title = "Naive full_join + fill()",
+    subtitle = sprintf("r = %.4f (p %s) | N = %d", naive_cor, format_pval(naive_pval), nrow(ual_pal_fulljoin_df)),
+    x = "UAL Log Returns",
+    y = "PAL Log Returns"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"))
+
+p2 <- ggplot(ual_pal_innerjoin_df, aes(x = UAL_ret, y = PAL_ret)) +
+  geom_point(alpha = 0.4, color = "seagreen") +
+  geom_smooth(method = "lm", color = "firebrick", linetype = "dashed", se = TRUE, alpha = 0.2) +
+  labs(
+    title = "Strict inner_join",
+    subtitle = sprintf("r = %.4f (p %s) | N = %d", strict_cor, format_pval(strict_pval), nrow(ual_pal_innerjoin_df)),
+    x = "UAL Log Returns",
+    y = "PAL Log Returns"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"))
+
+p1 + p2
 ```
 
 **Financial Interpretation:** The naive version reports a UAL-PAL correlation of just 0.0355, built on 1539 rows, many of them repeated/fabricated values from the forward-filled suspension rather than real paired price movements. Using only the 1206 days both stocks actually traded, the true correlation is 0.0759, more than double the naive estimate. That gap matters for portfolio decisions: relying on the naive number would lead you to conclude UAL and PAL offer more diversification benefit together than they actually do, understating how much their returns really move together. The true relationship is still fairly weak in absolute terms (two airlines on opposite sides of the world with very different local demand drivers), but it's meaningfully stronger than the naive join suggests. This is the same deflation mechanism as Investigation 1, just showing up in a pairwise statistic instead of a single asset's own volatility.
@@ -1185,7 +1306,50 @@ inflation_summary <- ual_inflation_summary %>%
   left_join(pal_inflation_summary, by = "inflation_regime") %>%
   arrange(inflation_regime)
 
+cat("=== Summary Statistics ===\n")
 print(inflation_summary, width = Inf)
+
+ual_ttest <- t.test(UAL_ret ~ inflation_regime, data = ual_inflation_df)
+pal_ttest <- t.test(PAL_ret ~ inflation_regime, data = pal_inflation_df)
+
+cat("\n=== T-Test: UAL Returns (High vs Low/Moderate Inflation) ===\n")
+print(ual_ttest)
+cat("\n=== T-Test: PAL Returns (High vs Low/Moderate Inflation) ===\n")
+print(pal_ttest)
+
+fmt_p <- function(p) if(p < 0.001) "< 0.001" else sprintf("= %.4f", p)
+
+# 4. Visualization 
+inflation_plot_df <- bind_rows(
+  ual_inflation_df %>% 
+    select(Date, inflation_regime, Return = UAL_ret) %>% 
+    mutate(Airline = "UAL"),
+  pal_inflation_df %>% 
+    select(Date, inflation_regime, Return = PAL_ret) %>% 
+    mutate(Airline = "PAL")
+)
+
+p_inflation <- ggplot(inflation_plot_df, aes(x = inflation_regime, y = Return, fill = inflation_regime)) +
+  geom_boxplot(alpha = 0.6, outlier.alpha = 0.4, outlier.size = 1) +
+  facet_wrap(~ Airline) +
+  scale_fill_manual(values = c("High inflation (>4% YoY)" = "firebrick", 
+                               "Low/moderate inflation (<=4% YoY)" = "steelblue")) +
+  labs(
+    title = "Airline Daily Returns by Inflation Regime",
+    subtitle = sprintf("T-Test p-values: UAL %s | PAL %s", fmt_p(ual_ttest$p.value), fmt_p(pal_ttest$p.value)),
+    x = NULL,
+    y = "Log Returns",
+    fill = "Inflation Regime"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text.x = element_blank(), # Hidden because legend handles regime labels
+    axis.ticks.x = element_blank(),
+    legend.position = "bottom"
+  )
+
+print(p_inflation)
 ```
 
 **Financial Interpretation:** UAL's average daily return flips from +0.15% when inflation is low or moderate to -0.04% once inflation climbs above 4%. The swing from positive to negative lines up with intuition, that higher inflation cuts into consumer travel budgets while also raising UAL's operating costs like fuel, wages, and leases. PAL doesn't show the same pattern; its average return is negative in both regimes (-0.07% and -0.03%), so inflation on its own doesn't appear to be a major driver for PAL specifically. Another important thing to note is how PAL's high-inflation bucket only has 349 real trading days against UAL's 545, since that stretch overlaps heavily with the suspension, so there's less to go on there. Volatility barely changes for either airline across the two regimes, so the real story is a shift in average return, not the stock getting riskier.
@@ -1214,6 +1378,14 @@ label_rate_regime <- function(df) {
 ual_rate_df <- fuel_leftjoin_df %>% label_rate_regime()
 pal_rate_df <- fuel_leftjoin_df_masked %>% label_rate_regime()
 
+get_beta_pval <- function(y, x) {
+  df <- na.omit(data.frame(y = y, x = x))
+  if(nrow(df) > 2) {
+    return(summary(lm(y ~ x, data = df))$coefficients[2, 4])
+  }
+  return(NA)
+}
+
 ual_rate_summary <- bind_rows(
   ual_rate_df %>% mutate(rate_regime = "Overall (all regimes)"),
   ual_rate_df
@@ -1223,6 +1395,7 @@ ual_rate_summary <- bind_rows(
     n_days_ual = n(),
     mean_UAL_ret = round(mean(UAL_ret), 5),
     UAL_oil_beta = round(cov(UAL_ret, WTI_ret, use = "complete.obs") / var(WTI_ret, na.rm = TRUE), 4),
+    UAL_beta_pval = round(get_beta_pval(UAL_ret, WTI_ret), 4),
     .groups = "drop"
   )
 
@@ -1235,6 +1408,7 @@ pal_rate_summary <- bind_rows(
     n_days_pal = n(),
     mean_PAL_ret = round(mean(PAL_ret), 5),
     PAL_oil_beta = round(cov(PAL_ret, WTI_ret, use = "complete.obs") / var(WTI_ret, na.rm = TRUE), 4),
+    PAL_beta_pval = round(get_beta_pval(PAL_ret, WTI_ret), 4),
     .groups = "drop"
   )
 
@@ -1242,7 +1416,49 @@ rate_summary <- ual_rate_summary %>%
   left_join(pal_rate_summary, by = "rate_regime") %>%
   arrange(rate_regime)
 
+cat("=== Summary Statistics (with Oil Beta p-values) ===\n")
 print(rate_summary, width = Inf)
+
+cat("\n=== ANOVA: UAL Returns across Rate Regimes ===\n")
+ual_anova <- aov(UAL_ret ~ rate_regime, data = ual_rate_df)
+print(summary(ual_anova))
+
+cat("\n=== ANOVA: PAL Returns across Rate Regimes ===\n")
+pal_anova <- aov(PAL_ret ~ rate_regime, data = pal_rate_df)
+print(summary(pal_anova))
+
+
+rate_plot_df <- bind_rows(
+  ual_rate_df %>% 
+    select(Date, rate_regime, Return = UAL_ret, WTI_ret) %>% 
+    mutate(Airline = "UAL"),
+  pal_rate_df %>% 
+    select(Date, rate_regime, Return = PAL_ret, WTI_ret) %>% 
+    mutate(Airline = "PAL")
+) %>%
+  filter(!is.na(Return), !is.na(WTI_ret))
+
+p_rate <- ggplot(rate_plot_df, aes(x = WTI_ret, y = Return, color = rate_regime)) +
+  geom_point(alpha = 0.15, size = 1) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = rate_regime), alpha = 0.2, linewidth = 1) +
+  facet_wrap(~ Airline) +
+  scale_color_viridis_d(option = "plasma", end = 0.8) +
+  scale_fill_viridis_d(option = "plasma", end = 0.8) +
+  labs(
+    title = "Airline Returns vs. Oil Returns by Fed Funds Rate Regime",
+    subtitle = "Lines represent the 'Oil Beta' (slope) for each environment. Shaded areas = 95% CI.",
+    x = "WTI Crude Log Returns",
+    y = "Airline Log Returns",
+    color = "Fed Funds Rate",
+    fill = "Fed Funds Rate"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+
+print(p_rate)
 ```
 
 **Financial Interpretation:** Breaking the sample out by Fed policy stance shows UAL's relationship with oil fading rather than flipping: +0.131 when rates are near zero, down to +0.074 during the hiking phase, and basically flat at -0.009 once policy turns restrictive. Oil and UAL's stock gradually stop moving together as the Fed tightens, rather than starting to move in opposite directions. PAL tells almost the same story in reverse: its beta goes from -0.095 (near-zero) to -0.059 (hiking) to -0.015 (restrictive), meaning its fuel-cost relationship is strongest exactly when money is cheap and weakens as rates climb. Put the two together and both airlines' link to oil shrinks as rates rise, regardless of whether that link starts positive or negative, which matters for anyone using oil as a hedge or signal for either stock: that relationship isn't constant, it depends on where we are in the rate cycle.
