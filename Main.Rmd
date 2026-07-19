@@ -1041,31 +1041,63 @@ pal_stats_comparison <- bind_rows(
   group_by(version) %>%
   summarise(
     N = n(),
-    Zero_Return_Pct = round(100 * mean(PAL_ret == 0), 1),
-    Mean = round(mean(PAL_ret), 6),
-    Median = round(median(PAL_ret), 6),
-    Variance = round(var(PAL_ret), 6),
-    SD = round(sd(PAL_ret), 4),
-    Min = round(min(PAL_ret), 4),
-    Max = round(max(PAL_ret), 4),
-    Range = round(max(PAL_ret) - min(PAL_ret), 4),
-    Skewness = round(skewness(PAL_ret), 3),
-    Kurtosis = round(kurtosis(PAL_ret), 3),
+    Zero_Return_Pct = round(100 * mean(PAL_ret == 0, na.rm = TRUE), 1),
+    Mean = round(mean(PAL_ret, na.rm = TRUE), 6),
+    Median = round(median(PAL_ret, na.rm = TRUE), 6),
+    Variance = round(var(PAL_ret, na.rm = TRUE), 6),
+    SD = round(sd(PAL_ret, na.rm = TRUE), 4),
+    Min = round(min(PAL_ret, na.rm = TRUE), 4),
+    Max = round(max(PAL_ret, na.rm = TRUE), 4),
+    Range = round(max(PAL_ret, na.rm = TRUE) - min(PAL_ret, na.rm = TRUE), 4),
+    Skewness = round(skewness(PAL_ret, na.rm = TRUE), 3),
+    Kurtosis = round(kurtosis(PAL_ret, na.rm = TRUE), 3),
     .groups = "drop"
   )
 
+cat("=== Distribution Statistics ===\n")
 print(pal_stats_comparison, width = Inf)
 
 naive_returns <- fuel_leftjoin_df$PAL_ret[!is.na(fuel_leftjoin_df$PAL_ret)]
 masked_returns <- fuel_leftjoin_df_masked$PAL_ret[!is.na(fuel_leftjoin_df_masked$PAL_ret)]
 
-cat("\n--- Kolmogorov-Smirnov Test (Distribution Difference) ---\n")
 ks_result <- ks.test(naive_returns, masked_returns)
+var_result <- var.test(naive_returns, masked_returns)
+
+cat("\n--- Kolmogorov-Smirnov Test (Distribution Difference) ---\n")
 print(ks_result)
 
 cat("\n--- F-Test for Equality of Variances (Volatility Difference) ---\n")
-var_result <- var.test(naive_returns, masked_returns)
 print(var_result)
+
+fmt_p <- function(p) if(p < 0.001) "< 0.001" else sprintf("= %.4f", p)
+
+plot_data <- bind_rows(
+  fuel_leftjoin_df        %>% mutate(version = "Forward-filled (naive)") %>% select(version, PAL_ret),
+  fuel_leftjoin_df_masked %>% mutate(version = "Halt-masked (corrected)") %>% select(version, PAL_ret)
+) %>%
+  filter(!is.na(PAL_ret))
+
+p_bias <- ggplot(plot_data, aes(x = PAL_ret, fill = version)) +
+  geom_density(alpha = 0.6, color = NA) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", alpha = 0.7) +
+  coord_cartesian(xlim = c(-0.1, 0.1)) + 
+  scale_fill_manual(values = c("Forward-filled (naive)" = "firebrick", 
+                               "Halt-masked (corrected)" = "steelblue")) +
+  labs(
+    title = "Impact of Trading Suspension Bias on PAL Returns",
+    subtitle = sprintf("KS Test (Distribution): p %s | F-Test (Variance): p %s", 
+                       fmt_p(ks_result$p.value), fmt_p(var_result$p.value)),
+    x = "PAL Log Returns",
+    y = "Density",
+    fill = "Data Treatment"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+
+print(p_bias)
 ```
 
 **Financial Interpretation:** Forward-filling raises PAL's share of zero-return days from 25.8% to 35.5% (about 1.4x), this pulls its standard deviation down (0.0252 to 0.0235) and inflating kurtosis (13.1 to 15.1). The halt gets recorded as "196 calm trading days" compared to "no market existed." 
@@ -1077,8 +1109,11 @@ In practical terms, anyone using the naive series to size a PAL position or esti
 **Objective:** Determine which airline, United or Philippine Airlines, carries more fuel-cost risk by comparing their sensitivity to crude oil price movements.
 
 ```{r sql2-oil-airline-exposure}
-oil_direction_summary <- fuel_leftjoin_df_masked %>%
-  mutate(oil_direction = if_else(WTI_ret > 0, "Oil Up", "Oil Down")) %>%
+oil_exposure_df <- fuel_leftjoin_df_masked %>%
+  filter(!is.na(WTI_ret), !is.na(UAL_ret), !is.na(PAL_ret)) %>%
+  mutate(oil_direction = if_else(WTI_ret > 0, "Oil Up (>0)", "Oil Down (<=0)"))
+
+oil_direction_summary <- oil_exposure_df %>%
   group_by(oil_direction) %>%
   summarise(
     n_days = n(),
@@ -1088,11 +1123,48 @@ oil_direction_summary <- fuel_leftjoin_df_masked %>%
   ) %>%
   arrange(oil_direction)
 
+cat("=== Airline Returns by Oil Direction ===\n")
 print(oil_direction_summary)
+
+ual_oil_ttest <- t.test(UAL_ret ~ oil_direction, data = oil_exposure_df)
+pal_oil_ttest <- t.test(PAL_ret ~ oil_direction, data = oil_exposure_df)
+
+cat("\n=== T-Test: UAL Returns (Oil Up vs Oil Down) ===\n")
+print(ual_oil_ttest)
+
+cat("\n=== T-Test: PAL Returns (Oil Up vs Oil Down) ===\n")
+print(pal_oil_ttest)
 
 cat("\nFull-sample regression betas (UAL from bea-leftjoin1; PAL from the masked companion):\n")
 cat("UAL oil-beta:", round(ual_oil_beta, 4), "| p =", round(ual_oil_p, 4), "\n")
 cat("PAL oil-beta:", round(pal_oil_beta_masked, 4), "| p =", round(pal_oil_p_masked, 4), "\n")
+
+fmt_p <- function(p) if(p < 0.001) "< 0.001" else sprintf("= %.4f", p)
+
+plot_df <- oil_exposure_df %>%
+  select(Date, oil_direction, UAL = UAL_ret, PAL = PAL_ret) %>%
+  pivot_longer(cols = c(UAL, PAL), names_to = "Airline", values_to = "Return")
+
+p_oil_direction <- ggplot(plot_df, aes(x = oil_direction, y = Return, fill = oil_direction)) +
+  geom_boxplot(alpha = 0.6, outlier.alpha = 0.2) +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "black") + 
+  facet_wrap(~ Airline) +
+  scale_fill_manual(values = c("Oil Down (<=0)" = "seagreen", "Oil Up (>0)" = "firebrick")) +
+  coord_cartesian(ylim = c(-0.1, 0.1)) + 
+  labs(
+    title = "Airline Returns by Daily Oil Price Direction",
+    subtitle = sprintf("T-Test p-values: UAL %s | PAL %s\n(Black diamonds indicate the mean)", 
+                       fmt_p(ual_oil_ttest$p.value), fmt_p(pal_oil_ttest$p.value)),
+    x = "Oil Price Direction",
+    y = "Airline Log Returns"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+print(p_oil_direction)
 ```
 
 **Financial Interpretation:** Interestingly, although UAL's beta is *larger* in magnitude (+0.104) but *positively* signed, signifying that it moves with oil, consistent with oil and airline stocks both being pro-cyclical/demand-driven in a simple two-variable regression with no macro controls. PAL's beta is smaller (-0.078) but *negatively* signed, implying that the "rising fuel cost hurts an airline". So UAL shows the stronger statistical co-movement, but PAL shows the theoretically correct cost-channel relationship. 
@@ -1102,6 +1174,13 @@ cat("PAL oil-beta:", round(pal_oil_beta_masked, 4), "| p =", round(pal_oil_p_mas
 **Objective:** Examine how United Airlines' sensitivity to oil prices behaved during the acute 2022 Russia-Ukraine oil shock (February 24-March 8), and assess the impact of Philippine Airlines being unable to trade during this same window.
 
 ```{r sql3-Russo-Ukrainian-oil-impact}
+plot_df <- fuel_leftjoin_df %>%
+  mutate(
+    Period = if_else(between(Date, as.Date("2022-02-24"), as.Date("2022-03-08")),
+                     "Ukraine Shock", "Full Sample (excluding shock)")
+  ) %>%
+  filter(!is.na(UAL_ret), !is.na(WTI_ret))
+
 ukraine_shock_df_all_ual <- fuel_leftjoin_df %>%
   filter(between(Date, as.Date("2022-02-24"), as.Date("2022-03-08")))
 ukraine_shock_df_pal <- fuel_leftjoin_df_masked %>%
@@ -1124,7 +1203,7 @@ ttest_wti_full <- t.test(fuel_leftjoin_df$WTI_ret)
 ttest_wti_shock <- t.test(ukraine_shock_df_all_ual$WTI_ret)
 
 shock_vs_full <- tibble(
-  Period = c("Full sample", "Ukraine shock (2022-02-24 to 2022-03-08)"),
+  Sample_Period = c("Full sample", "Ukraine shock (2022-02-24 to 2022-03-08)"),
   N = c(nrow(fuel_leftjoin_df), nrow(ukraine_shock_df_all_ual)),
   
   UAL_oil_beta = c(round(coef(lm_full)[2], 4), round(coef(lm_shock)[2], 4)),
@@ -1139,7 +1218,42 @@ shock_vs_full <- tibble(
   WTI_ret_p_value = c(round(ttest_wti_full$p.value, 4), round(ttest_wti_shock$p.value, 4))
 )
 
+cat("=== Summary Statistics ===\n")
 print(shock_vs_full, width = Inf)
+
+ual_diff_test <- t.test(UAL_ret ~ Period, data = plot_df)
+wti_diff_test <- t.test(WTI_ret ~ Period, data = plot_df)
+
+cat("\n=== Two-Sample T-Tests (Shock vs. Rest of Sample) ===\n")
+cat("UAL Return Difference p-value:", format.pval(ual_diff_test$p.value, digits = 4), "\n")
+cat("WTI Return Difference p-value:", format.pval(wti_diff_test$p.value, digits = 4), "\n\n")
+
+fmt_p <- function(p) if(p < 0.001) "< 0.001" else sprintf("= %.4f", p)
+
+p_shock <- ggplot(plot_df, aes(x = WTI_ret, y = UAL_ret, color = Period)) +
+  geom_point(aes(alpha = Period, size = Period)) +
+  geom_smooth(method = "lm", se = FALSE, aes(linetype = Period), linewidth = 1.2) +
+  scale_color_manual(values = c("Full Sample (excluding shock)" = "gray70", 
+                                "Ukraine Shock" = "firebrick")) +
+  scale_alpha_manual(values = c("Full Sample (excluding shock)" = 0.3, 
+                                "Ukraine Shock" = 1)) +
+  scale_size_manual(values = c("Full Sample (excluding shock)" = 1, 
+                               "Ukraine Shock" = 3)) +
+  labs(
+    title = "Oil Beta Shift During the Russo-Ukrainian Invasion Shock",
+    subtitle = sprintf("Mean Return Diff p-values (vs full sample): UAL %s | WTI %s", 
+                       fmt_p(ual_diff_test$p.value), fmt_p(wti_diff_test$p.value)),
+    x = "WTI Crude Log Returns",
+    y = "UAL Log Returns",
+    color = "Period", linetype = "Period", alpha = "Period", size = "Period"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+
+print(p_shock)
 ```
 
 **Financial Interpretation:** PAL has zero trading days in this window, its suspension (2021-06-17 to 2022-03-27) covers the entire shock. UAL investors could reprice the stock in real time against the oil spike; PAL investors could not trade at any price, favorable or not. That absence is itself the finding: a real-world illustration of market friction/information asymmetry, not just a data-cleaning footnote. UAL's own beta is also striking here: it *flips sign*, from +0.104 full-sample to -0.417 during the shock, alongside a -3.4% average daily return over those 9 days. That's consistent with the invasion being a broad risk-off/war-fear event that hit airline stocks directly (falling, alongside rising oil), temporarily overwhelming the smaller demand-channel co-movement seen in the full-sample average. (With only 9 trading days behind it, this specific beta shouldn't be treated as a precise, tradeable number, but the direction and size of the swing support the broader point: a real oil shock can temporarily overwhelm an airline's typical demand-channel behavior.)
@@ -1156,16 +1270,20 @@ period_label <- function(d) case_when(
 )
 
 get_beta_pval <- function(y, x) {
-  mod_summary <- summary(lm(y ~ x)) 
-  if (nrow(mod_summary$coefficients) > 1) {
-    return(round(mod_summary$coefficients[2, 4], 4))
-  } else {
-    return(NA)
+  df <- na.omit(data.frame(y = y, x = x))
+  if (nrow(df) > 2) {
+    mod_summary <- summary(lm(y ~ x, data = df)) 
+    if (nrow(mod_summary$coefficients) > 1) {
+      return(round(mod_summary$coefficients[2, 4], 4))
+    }
   }
+  return(NA)
 }
 
-ual_period_beta <- fuel_leftjoin_df %>%
-  mutate(period = period_label(Date)) %>%
+ual_df_period <- fuel_leftjoin_df %>% mutate(period = period_label(Date))
+pal_df_period <- fuel_leftjoin_df_masked %>% mutate(period = period_label(Date))
+
+ual_period_beta <- ual_df_period %>%
   group_by(period) %>%
   summarise(
     n_days_ual = n(),
@@ -1174,8 +1292,7 @@ ual_period_beta <- fuel_leftjoin_df %>%
     .groups = "drop"
   )
 
-pal_period_beta <- fuel_leftjoin_df_masked %>%
-  mutate(period = period_label(Date)) %>%
+pal_period_beta <- pal_df_period %>%
   group_by(period) %>%
   summarise(
     n_days_pal = n(),
@@ -1188,7 +1305,52 @@ period_beta <- ual_period_beta %>%
   left_join(pal_period_beta, by = "period") %>%
   arrange(period)
 
+cat("=== Oil Beta by Time Period ===\n")
 print(period_beta, width = Inf)
+
+ual_interaction_model <- lm(UAL_ret ~ WTI_ret * period, data = ual_df_period)
+pal_interaction_model <- lm(PAL_ret ~ WTI_ret * period, data = pal_df_period)
+
+ual_anova <- anova(ual_interaction_model)
+pal_anova <- anova(pal_interaction_model)
+
+ual_int_pval <- ual_anova["WTI_ret:period", "Pr(>F)"]
+pal_int_pval <- pal_anova["WTI_ret:period", "Pr(>F)"]
+
+cat("\n=== ANOVA: Did the Oil Beta significantly change across periods? ===\n")
+cat("UAL Interaction p-value:", format.pval(ual_int_pval, digits = 4), "\n")
+cat("PAL Interaction p-value:", format.pval(pal_int_pval, digits = 4), "\n")
+
+fmt_p <- function(p) if(!is.na(p) && p < 0.001) "< 0.001" else sprintf("= %.4f", p)
+
+plot_df <- bind_rows(
+  ual_df_period %>% select(Date, period, Return = UAL_ret, WTI_ret) %>% mutate(Airline = "UAL"),
+  pal_df_period %>% select(Date, period, Return = PAL_ret, WTI_ret) %>% mutate(Airline = "PAL")
+) %>%
+  filter(!is.na(Return), !is.na(WTI_ret))
+
+p_period <- ggplot(plot_df, aes(x = WTI_ret, y = Return, color = period)) +
+  geom_point(alpha = 0.2, size = 1) +
+  geom_smooth(method = "lm", se = TRUE, aes(fill = period), alpha = 0.2, linewidth = 1) +
+  facet_wrap(~ Airline) +
+  scale_color_viridis_d(option = "mako", end = 0.8) +
+  scale_fill_viridis_d(option = "mako", end = 0.8) +
+  labs(
+    title = "Evolution of Airline Sensitivity to Oil Returns",
+    subtitle = sprintf("Interaction ANOVA (Slope Change): UAL p %s | PAL p %s", 
+                       fmt_p(ual_int_pval), fmt_p(pal_int_pval)),
+    x = "WTI Crude Log Returns",
+    y = "Airline Log Returns",
+    color = "Time Period",
+    fill = "Time Period"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+
+print(p_period)
 ```
 
 **Financial Interpretation:** UAL's oil-beta is not a stable relationship. It swings from +0.178 pre-shock to -0.155 during the shock era to -0.020 in the recovery period, meaning Investigation 2's full-sample beta (+0.104) is really a blended average across three very different regimes, not something an investor could reliably trade on as a fixed relationship. PAL's beta, by contrast, stays negative throughout (-0.091, -0.083, -0.020): the fuel-cost story holds up more consistently for PAL than the demand-channel story does for UAL, though PAL's shock-era reading rests on a noticeably smaller sample (193 trading days) since the suspension cuts directly into that period. Practically, this means UAL's oil exposure is regime-dependent and needs to be reassessed as market conditions shift, whereas PAL's fuel-cost relationship is the steadier of the two.
