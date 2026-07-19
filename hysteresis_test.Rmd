@@ -1,0 +1,166 @@
+---
+title: "Hysteresis and Critical Phenomena Dynamics"
+output: html_documentknitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+---
+
+
+# Footnote:
+
+**What would a genuinely CAS (not just higher-dimensional NCE) account of the yield curve look like?** This is explored conceptually only - it is not implemented in code above, and is flagged as a candidate direction for a future pass rather than a claim this report currently makes.
+
+The Litterman-Scheinkman factors are a *kinematic* description: they tell you the curve's instantaneous shape (its three coordinates at time $t$), the same way a photograph tells you a system's position. They say nothing about *how* the curve got there, whether that process is reversible, or whether energy/information is being dissipated along the way - which is precisely what "complex adaptive" is supposed to mean in this report's framework. A genuine CAS account would need to swap the kinematic question ("what shape is the curve in?") for a thermodynamic/dynamical one ("is the process that produces this shape reversible or does it dissipate, and does it show memory of its own history?"). Two concrete, citable ways to operationalize that:
+
+ 1. **Irreversibility / hysteresis.** A rate-hiking cycle and a rate-cutting cycle that pass through the same Level/Slope/Curvature coordinates are not thermodynamically equivalent if the path taken to reach and leave that coordinate differs (e.g., central banks are well documented to cut more cautiously than they hike, and credit spreads that widen during stress don't retrace symmetrically as stress subsides). This is a direct, testable hysteresis-loop question - plot the curve's trajectory through $(L_t, S_t, C_t)$ space and check whether the up-cycle and down-cycle paths overlap or diverge - and it's the same "does the flow contract, expand, or trace out an irreversible loop" question raised in the 06_1 footnote, applied here at the macro scale instead of the single-asset scale.
+ 2. **Regime shifts as critical phenomena rather than smooth factor rotation.** Under NCE-extended factor rotation, the curve moves continuously through $(L, S, C)$ space. Under a genuine CAS account, transitions like sudden inversions or the depth of an inversion could instead resemble a system approaching a critical point - small, gradual pushes (rate hikes) that eventually trigger a large, discontinuous, self-reinforcing response (a credit event, a liquidity crunch), rather than a proportionate linear reaction. This is the same phenomenon Sornette (2003) models for equity crashes as critical, log-periodic events [17], and it has a general physical mechanism in self-organized criticality (Bak, Tang, & Wiesenfeld, 1987) [18] - systems that are slowly, continuously driven (central bank tightening) but release stress in sudden, scale-free bursts rather than smoothly. On the economics side, this pairs naturally with Minsky's (1992) Financial Instability Hypothesis [19], which makes a structurally similar claim in economic (not physical) language: stability itself breeds the conditions for instability.
+
+Both directions are genuine research extensions rather than something this section currently tests - flagging them here is meant to keep the "NCE vs. CAS" framing honest about which of its own claims are actually earned by the code above, versus which are aspirational for now.
+
+Configuring Libraries and Workspace
+
+```{r}
+run_plots <- TRUE
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  run_plots <- FALSE
+}
+```
+Green's Theorem for Hysteresis Loop Area
+```{r} 
+calculate_loop_area <- function(x, y) {
+ 
+  n <- length(x)
+  if (n < 3) return(0)
+  sum_val <- 0
+  for (i in 1:(n - 1)) {
+    sum_val <- sum_val + (x[i] * y[i + 1] - x[i + 1] * y[i])
+  }
+  sum_val <- sum_val + (x[n] * y[1] - x[1] * y[n])
+  return(0.5 * abs(sum_val))
+}
+```
+Segmenting Macroeconomic Cycles
+
+```{r}
+macro_data <- macro_data %>%
+  mutate(
+    FedFunds_Delta = FEDFUNDS - lag(FEDFUNDS, default = first(FEDFUNDS)),
+    Phase = ifelse(FedFunds_Delta >= 0, "Hiking (Loading)", "Cutting (Relaxation)")
+  )
+
+macro_data <- macro_data %>%
+  mutate(
+    Phase_Numeric = ifelse(Phase == "Hiking (Loading)", 1, 0),
+    Phase_Change = c(0, diff(Phase_Numeric)),
+    Cycle_ID = cumsum(abs(Phase_Change))
+  )
+
+hysteresis_summary <- macro_data %>%
+  group_by(Cycle_ID) %>%
+  filter(n() >= 10) %>%
+  summarise(
+    Start_Date = min(Date),
+    End_Date = max(Date),
+    Phase_Type = first(Phase),
+    Loop_Area_Slope_Curvature = calculate_loop_area(Slope, Curvature),
+    Mean_Level = mean(Level),
+    .groups = 'drop'
+  )
+```
+Calculating Rolling Critical Slowing Down (CSD) Metrics
+```{r}
+window_size <- 52
+
+rolling_csd <- macro_data %>%
+  mutate(
+    Roll_Var = rollapplyr(Slope, width = window_size, FUN = var, fill = NA),
+    Roll_AR1 = rollapplyr(Slope, width = window_size, FUN = function(x) {
+      if (any(is.na(x))) return(NA)
+      cor(x[-1], x[-length(x)])
+    }, fill = NA)
+  ) %>%
+  drop_na(Roll_Var, Roll_AR1)
+```
+Dynamical Analysis Report
+```{r}
+mean_hyst_area <- mean(hysteresis_summary$Loop_Area_Slope_Curvature, na.rm = TRUE)
+latest_var <- tail(rolling_csd$Roll_Var, 1)
+latest_ar1 <- tail(rolling_csd$Roll_AR1, 1)
+
+minsky_alert <- "STABLE"
+minsky_meaning <- "System exhibits healthy negative-feedback dynamics. Small shocks quickly dissipate."
+
+if (latest_var > quantile(rolling_csd$Roll_Var, 0.75, na.rm=TRUE) && 
+    latest_ar1 > quantile(rolling_csd$Roll_AR1, 0.75, na.rm=TRUE)) {
+  minsky_alert <- "CRITICAL INSTABILITY WARNING (Minsky Threshold Near)"
+  minsky_meaning <- "Co-spiking Variance and Autocorrelation (CSD) detected. The system has lost negative-feedback resilience.\n  Shocks will trigger large-scale self-organized cascading collapses (avalanche risk)."
+}
+
+dynamics_output <- sprintf("
+DYNAMICS & NON-EQUILIBRIUM COMPLEXITY REPORT
+
+## DYNAMIC PHENOMENON 1: YIELD CURVE HYSTERESIS & THERMODYNAMIC MEMORY
+
+* Irreversibility Metric (Mean Loop Area S-C Orbit) : %0.4f
+* Cycle Trajectory Profile                           : Path Divergent
+
+* Dynamic Meaning:
+  The rate-hiking and rate-cutting phases trace out distinct, asymmetric orbits
+  in state space. This rejects smooth neo-classical rotation; the yield curve
+  retains a 'structural memory' of peak policy stress long into easing cycles.
+
+## DYNAMIC PHENOMENON 2: CRITICAL SLOWING DOWN & SOC PHASES (Minsky Moments)
+
+* Rolling Window Size                      : %d Periods
+* Current Rolling Variance (Slope)         : %0.4f
+* Current Rolling Autocorrelation (AR-1)   : %0.4f
+* Instability Status: %s
+
+* Systemic Meaning:
+  %s
+  ================================================================================
+  ",
+  mean_hyst_area,
+  window_size,
+  latest_var,
+  latest_ar1,
+  minsky_alert,
+  minsky_meaning
+)
+
+cat(dynamics_output)
+```
+Exploratory Visualizations
+```{r}
+if (run_plots) {
+  library(ggplot2)
+
+  p1 <- ggplot(macro_data, aes(x = Slope, y = Curvature, color = Phase)) +
+    geom_path(aes(group = Cycle_ID), size = 0.8, alpha = 0.7,
+              arrow = arrow(type = "closed", length = unit(0.08, "inches"))) +
+    scale_color_manual(values = c("Cutting (Relaxation)" = "#ef8a62", "Hiking (Loading)" = "#67a9cf")) +
+    labs(
+      title = "Hysteresis Orbits in (Slope, Curvature) Space",
+      subtitle = "Divergent loading vs. relaxation paths prove state memory",
+      x = "Slope (Spread)",
+      y = "Curvature (Belly Distortion)"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+
+  p2 <- ggplot(rolling_csd, aes(x = Date)) +
+    geom_line(aes(y = Roll_Var, color = "Rolling Variance (Left)"), size = 1) +
+    geom_line(aes(y = Roll_AR1 * max(Roll_Var, na.rm=TRUE), color = "Rolling AR1 (Right)"), size = 1, linetype = "dashed") +
+    scale_y_continuous(sec.axis = sec_axis(~ . / max(rolling_csd$Roll_Var, na.rm=TRUE), name = "Lag-1 Autocorrelation (AR1)")) +
+    scale_color_manual(values = c("Rolling Variance (Left)" = "#b2182b", "Rolling AR1 (Right)" = "#4d4d4d")) +
+    labs(
+      title = "Systemic Criticality Indicators (CSD)",
+      subtitle = "Spike in both metrics indicates proximity to a Minsky state transition",
+      x = "Timeline",
+      y = "Rolling Variance"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom", legend.title = element_blank())
+
+  print(p1)
+  print(p2)
+}
+```

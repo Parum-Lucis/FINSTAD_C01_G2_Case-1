@@ -12,7 +12,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 ```{r set-environment-dependencies}
 required_packages <- c(
-  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr","stringr", "ggplot2", "quantmod", "ggrepel","zoo", "lubridate", "corrplot", "patchwork"
+  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr","stringr", "ggplot2", "quantmod", "ggrepel","zoo", "lubridate", "corrplot", "patchwork", "plotly", "e1071", "tseries", "pracma", "htmltools", "zoo", "viridisLite", "lubridate", "ggcorrplot", "ggnetwork", "igraph", "gridExtra", "kableExtra", "psych", "urca", "broom", "tidyverse", "TDA", "webshot2", "urca", "fUnitRoots"
 )
 
 missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
@@ -77,18 +77,19 @@ fred_tickers <- c(
   "DGS10",
   "FEDFUNDS",
   "CPIAUCSL",
-  "DCOILWTICO"
+  "DCOILWTICO",
+  "DGS2"
 )
 
 getSymbols(fred_tickers, src = "FRED")
-
+DGS2 <- window(DGS2, start = start_date, end = end_date)
 DGS10 <- window(DGS10, start = start_date, end = end_date)
 FEDFUNDS <- window(FEDFUNDS, start = start_date, end = end_date)
 CPIAUCSL <- window(CPIAUCSL, start = start_date, end = end_date)
 DCOILWTICO <- window(DCOILWTICO, start = start_date, end = end_date)
 ```
 ```{r init-obs}
-instruments <- c("UAL", "PAL", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO")
+instruments <- c("UAL", "PAL", "BTC-USD", "SPY", "VIX", "DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "DGS2")
 init_obs <- function(ticker_list, sample_size = 3){
    for (sym in ticker_list) {
     data_obj <- get(sym)
@@ -147,7 +148,7 @@ df_list <- map(instruments, function(sym) {
   data_obj <- get(sym)
   
   # If it has an Adjusted column, extract it. Otherwise, use the raw data object.
-  if (has.Ad(data_obj)) {
+  if (has.Ad(data_obj) ) {
     extracted_data <- Ad(data_obj)
   } else {
     extracted_data <- data_obj
@@ -196,13 +197,23 @@ in_pal_halt <- function(dates) {
 master_df_levels <- master_df
 ```
 
+Get the log returns of each asset
 ```{r log-returns}
+# Get Log Adjusted (Difference of Logs) from tickers with adjusted price. 
+adjusted_cols <- names(master_df)[str_detect(names(master_df), "\\.Adjusted$")]
 master_df <- master_df %>%
-  mutate(across(
-    -Date, 
-    ~ c(NA, diff(log(.x)))
-  )) %>%
-  rename_with(~ str_replace(.x, "\\.Adjusted$", ".LogAdj"), -Date)
+  # Mutate only calculate log returns on columns that end in ".Adjusted"
+  # This automatically ignores DGS10, DGS2, FEDFUNDS, and CPIAUCSL
+  mutate(
+    across(
+      all_of(adjusted_cols),
+      ~ c(NA, diff(log(.x))),
+      .names = "{str_remove(.col, '\\\\.Adjusted')}.LogAdj"
+    )
+  ) %>%
+  select(-all_of(setdiff(adjusted_cols, "VIX.Adjusted")))
+
+master_df
 ```
 
 ```{r explore-master-df}
@@ -277,7 +288,8 @@ target_cols <- c(
   "DGS10",
   "FEDFUNDS",
   "CPIAUCSL",
-  "DCOILWTICO"
+  "DCOILWTICO",
+  "DGS2"
 )
 
 for (col in target_cols) {
@@ -1624,3 +1636,35 @@ print(p_rate)
 ```
 
 **Financial Interpretation:** Breaking the sample out by Fed policy stance shows UAL's relationship with oil fading rather than flipping: +0.131 when rates are near zero, down to +0.074 during the hiking phase, and basically flat at -0.009 once policy turns restrictive. Oil and UAL's stock gradually stop moving together as the Fed tightens, rather than starting to move in opposite directions. PAL tells almost the same story in reverse: its beta goes from -0.095 (near-zero) to -0.059 (hiking) to -0.015 (restrictive), meaning its fuel-cost relationship is strongest exactly when money is cheap and weakens as rates climb. Put the two together and both airlines' link to oil shrinks as rates rise, regardless of whether that link starts positive or negative, which matters for anyone using oil as a hedge or signal for either stock: that relationship isn't constant, it depends on where we are in the rate cycle.
+
+```{r financial-investigation-nce-cas, echo=TRUE, child='06_financial_investigation.rmd'}
+```
+
+
+# Bibliography:
+**Neoclassical Economics / Classical finance**
+- [2] Fama, E. F. (1970). Efficient capital markets: A review of theory and empirical work. *The Journal of Finance*, 25(2), 383-417.
+- [3] Grinold, R. C. (1989). The fundamental law of active management. *The Journal of Portfolio Management*, 15(3), 30-38.
+- [6] Markowitz, H. (1952). Portfolio selection. *The Journal of Finance*, 7(1), 77-91.
+- [7] Sharpe, W. F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. *The Journal of Finance*, 19(3), 425-442.
+- [9] Sewell, M. (2012). The efficient market hypothesis: Empirical evidence. *International Journal of Statistics and Probability*, 1(2), 164-178.
+- [13] Lo, A. W., & MacKinlay, A. C. (1988). Stock market prices do not follow random walks: Evidence from a simple specification test. *The Review of Financial Studies*, 1(1), 41-66.
+
+**Complex Adaptive Systems / Econophysics**
+- [1] Bouchaud, J. P., Farmer, J. D., & Lillo, F. (2009). How markets slowly digest large trading orders. In *Handbook of Financial Markets: Dynamics and Evolution* (pp. 57-160).
+- [4] Litterman, R., & Scheinkman, J. (1991). Common factors affecting bond returns. *The Journal of Fixed Income*, 1(1), 54-61.
+- [5] Mandelbrot, B. (1963). The variation of certain speculative prices. *The Journal of Business*, 36(4), 394-419.
+- [10] Mantegna, R. N., & Stanley, H. E. (1999). *An Introduction to Econophysics: Correlations and Complexity in Finance*. Cambridge University Press.
+- [11] Lux, T., & Marchesi, M. (1999). Scaling and criticality in a stochastic multi-agent model of a financial market. *Nature*, 397(6719), 498-500.
+- [12] Cont, R. (2001). Empirical properties of asset returns: Stylized facts and statistical issues. *Quantitative Finance*, 1(2), 223-236.
+- [14] Hill, B. M. (1975). A simple general approach to inference about the tail of a distribution. *The Annals of Statistics*, 3(5), 1163-1174.
+- [15] Hurst, H. E. (1951). Long-term storage capacity of reservoirs. *Transactions of the American Society of Civil Engineers*, 116, 770-808.
+- [17] Sornette, D. (2003). *Why Stock Markets Crash: Critical Events in Complex Financial Systems*. Princeton University Press.
+- [18] Bak, P., Tang, C., & Wiesenfeld, K. (1987). Self-organized criticality: An explanation of the 1/f noise. *Physical Review Letters*, 59(4), 381-384.
+- [19] Minsky, H. P. (1992). The financial instability hypothesis. *Levy Economics Institute Working Paper No. 74*.
+
+**Supplementary / instructional**
+- [8] jetbundle. (2026). The black book of quantitative finance. https://www.youtube.com/watch?v=AKIkhuR7HYY
+- [16] jetbundle. (2026). 6 laws behind modern quantitative finance. https://www.youtube.com/watch?v=cvL_uWtMTAo
+
+

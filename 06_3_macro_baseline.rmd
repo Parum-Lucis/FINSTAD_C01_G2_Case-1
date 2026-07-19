@@ -1,0 +1,477 @@
+
+Here, we view the entire context of the market and economy.
+
+## Structure
+
+**NCE**: via CAPM, collapses the entire term structure into one risk-free rate — a single number standing in for "the cost of money."
+ 
+ 1. Raw Input: Daily DGS10, DGS2, or monthly FEDFUNDS.
+ 2. Enriched State: A single risk-free scalar ($r_f$) selected based on the closest maturity to the asset's cash flows (e.g., using DGS2 for a 2-year horizon contract).
+ 3. Compression: The chosen flat scalar applied as a uniform baseline denominator in linear valuation equations.
+
+```{r}
+# --- 1. DYNAMIC PARAMETER ESTIMATION FROM DATA ---
+# Extract daily log returns from your master dataframe
+daily_returns <- master_df %>%
+  select(
+    Date,
+    SPY = SPY.LogAdj,
+    PAL = PAL.LogAdj,
+    UAL = UAL.LogAdj,
+    BTC = `BTC-USD.LogAdj`
+  ) %>%
+  drop_na() %>%
+  select(-Date)
+
+# Define trading frequency scaling factor (Annualized)
+scale_factor <- 252
+
+# A. Calculate Dynamic Expected Annualized Returns (mu)
+# Using mean daily log returns annualized
+mu <- colMeans(daily_returns) * scale_factor
+
+# B. Calculate Dynamic Annualized Volatilities (vol)
+vol <- apply(daily_returns, 2, sd) * sqrt(scale_factor)
+
+# C. Calculate Dynamic Correlation Matrix
+corr_matrix <- cor(daily_returns)
+
+# D. Calculate Dynamic Covariance Matrix (Sigma)
+# Sigma = D %*% R %*% D where D is diagonal of standard deviations
+D <- diag(vol)
+Sigma <- D %*% corr_matrix %*% D
+
+# --- 2. SOLVE ANALYTIC EFFICIENT FRONTIER WITH EMPIRICAL DATA ---
+rf <- 0.045  # Standard policy/risk-free rate (4.5%)
+inv_Sigma <- solve(Sigma)
+
+ones <- rep(1, length(mu))
+A <- as.numeric(t(ones) %*% inv_Sigma %*% ones)
+B <- as.numeric(t(ones) %*% inv_Sigma %*% mu)
+C <- as.numeric(t(mu) %*% inv_Sigma %*% mu)
+D_val <- A * C - B^2
+
+# Generate empirical frontier curve points
+target_returns <- seq(min(mu) - 0.05, max(mu) + 0.10, length.out = 500)
+frontier_points <- data.frame(Return = target_returns) %>%
+  mutate(
+    Variance = (A * Return^2 - 2 * B * Return + C) / D_val,
+    SD = sqrt(Variance)
+  )
+
+# --- 3. DISSOLVE TANGENCY PORTFOLIO (M) ---
+excess_return <- mu - rf * ones
+w_tangency <- inv_Sigma %*% excess_return
+w_tangency <- w_tangency / sum(w_tangency)
+
+ret_m <- as.numeric(t(w_tangency) %*% mu)
+sd_m <- as.numeric(sqrt(t(w_tangency) %*% Sigma %*% w_tangency))
+sharpe_m <- (ret_m - rf) / sd_m
+
+# --- 4. RISK DECOMPOSITION FOR UAL ---
+ual_ret <- mu["UAL"]
+ual_sd  <- vol["UAL"]
+sd_a <- (ual_ret - rf) / sharpe_m
+
+# --- 5. RENDER THE DYNAMIC PLOT ---
+ggplot() +
+  geom_path(data = frontier_points, aes(x = SD, y = Return), 
+            color = "black", size = 1.1) +
+  geom_abline(intercept = rf, slope = sharpe_m, 
+              color = "blue", size = 1, linetype = "solid") +
+  
+  # Horizontal drop lines
+  annotate("segment", x = 0, xend = ual_sd, y = ual_ret, yend = ual_ret, 
+           color = "grey50", linetype = "dashed") +
+  annotate("segment", x = sd_a, xend = sd_a, y = 0, yend = ual_ret, 
+           color = "grey50", linetype = "dotted") +
+  annotate("segment", x = ual_sd, xend = ual_sd, y = 0, yend = ual_ret, 
+           color = "grey50", linetype = "dotted") +
+  
+  # Risk Brackets at the bottom of the plot
+  annotate("segment", x = 0.01, xend = sd_a - 0.01, y = 0.01, yend = 0.01, 
+           arrow = arrow(ends = "both", angle = 90, length = unit(.1, "cm")), color = "#D14949", size = 0.8) +
+  annotate("text", x = sd_a / 2, y = 0.02, label = "Systematic\nRisk", 
+           color = "#D14949", size = 3, fontface = "bold") +
+  
+  annotate("segment", x = sd_a + 0.01, xend = ual_sd - 0.01, y = 0.01, yend = 0.01, 
+           arrow = arrow(ends = "both", angle = 90, length = unit(.1, "cm")), color = "#20639B", size = 0.8) +
+  annotate("text", x = (sd_a + ual_sd) / 2, y = 0.02, label = "Diversifiable\n(Idiosyncratic) Risk", 
+           color = "#20639B", size = 3, fontface = "bold") +
+  
+  # Reference Nodes
+  annotate("point", x = 0, y = rf, color = "black", size = 4, shape = 18) +
+  annotate("text", x = 0.01, y = rf + 0.005, label = "r[f]", parse = TRUE, fontface = "bold", hjust = 0) +
+  
+  annotate("point", x = sd_m, y = ret_m, color = "darkgreen", size = 4) +
+  annotate("text", x = sd_m - 0.015, y = ret_m + 0.01, label = "M (Tangency Portfolio)", 
+           color = "darkgreen", fontface = "bold", hjust = 1) +
+  
+  annotate("point", x = sd_a, y = ual_ret, color = "black", size = 3) +
+  annotate("text", x = sd_a + 0.01, y = ual_ret - 0.01, label = "A", fontface = "bold") +
+  
+  # Asset labels (Dynamically positioned at their real calculated risk/return points)
+  geom_point(data = data.frame(SD = vol, Return = mu, Asset = names(mu)), 
+             aes(x = SD, y = Return, color = Asset), size = 4) +
+  geom_text(data = data.frame(SD = vol, Return = mu, Asset = names(mu)), 
+            aes(x = SD, y = Return, label = Asset), vjust = -1.2, fontface = "bold", size = 3.5) +
+  
+  scale_color_manual(values = c("SPY" = "#3CAEA3", "PAL" = "#F6D55C", "UAL" = "#20639B", "BTC" = "#D14949")) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  coord_cartesian(xlim = c(0, max(vol) * 2.5), ylim = c(min(mu), max(mu) * 2.5)) +
+  theme_minimal(base_size = 12) +
+  labs(
+    title = "Capital Allocation Line & Empirical Efficient Frontier",
+    subtitle = "Calculated Dynamically from Real-World Asset Return Matrix",
+    x = "Portfolio Total Risk (Standard Deviation)",
+    y = "Expected Return (E[R])"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text = element_text(face = "bold")
+  )
+```
+
+
+**NCE (extended — factor decomposition):** The single-scalar CAPM view above is the *degenerate* case of a richer, but still classical, equilibrium-econometrics model: the Litterman & Scheinkman (1991) three-factor decomposition of the yield curve [4]. This is a linear, orthogonal (PCA-derived) re-coordinatization of the same term structure - it relaxes "one rate" to "three factors," but it is still a static, reversible, equilibrium description with no feedback, heterogeneous agents, or path-dependent mechanism attached. That is why it belongs on the NCE side of this report rather than the CAS side: richer linear algebra is not, by itself, evidence of a complex adaptive system. (See the Footnote at the end of this section for what a genuinely CAS-consistent account of the yield curve would need to look like instead.)
+
+ 1. Raw Input: Co-moving rates across the term spectrum (FEDFUNDS, DGS2, and DGS10) matched with macroeconomic inflation context (CPIAUCSL).
+ 2. Enriched State: A 3-dimensional coordinate state vector mapping the classical Litterman-Scheinkman yield curve factors directly:
+   - $\text{Level}_t = \frac{\text{FEDFUNDS}_t + \text{DGS2}_t + \text{DGS10}_t}{3}$ (Overall altitude of interest rates)
+   - $\text{Slope}_t = \text{DGS10}_t - \text{FEDFUNDS}_t$ (The long-to-short macro spread)
+   - $\text{Curvature}_t = (\text{DGS10}_t - \text{DGS2}_t) - (\text{DGS2}_t - \text{FEDFUNDS}_t) = \text{DGS10}_t - 2\cdot\text{DGS2}_t + \text{FEDFUNDS}_t$ (The structural bend/twist of the medium-term belly relative to the anchors)
+ 3. Compression: Projecting this 3D coordinate $[L_t, S_t, C_t]$ onto distinct, discrete macro-regime charts (e.g., Bear Flattener, Bull Steeper, or Inverted Belly).
+
+This directly invokes Litterman & Scheinkman's (1991) three-factor principal-component result, which finds that over 95% of term-structure variation is captured by these three orthogonal geometric transformations (Level, Slope, and Curvature) [4].
+
+```{r}
+# --- 1. DATA ENRICHMENT ---
+macro_enriched <- master_df %>%
+  select(Date, FEDFUNDS, DGS2, DGS10, CPIAUCSL) %>%
+  # Carry forward monthly CPI to daily observations if dataframe is daily
+  mutate(CPIAUCSL = zoo::na.locf(CPIAUCSL, na.rm = FALSE)) %>%
+  drop_na() %>%
+  mutate(
+    
+    # Calculate Nominal Factors
+    Level = (FEDFUNDS + DGS2 + DGS10) / 3,
+    Slope = DGS10 - FEDFUNDS,
+    Curvature = DGS10 - (2 * DGS2) + FEDFUNDS,
+  ) %>%
+  drop_na()
+
+# --- 2. PANEL A: RAW TERM STRUCTURE ---
+raw_long <- macro_enriched %>%
+  select(Date, FEDFUNDS, DGS2, DGS10) %>%
+  pivot_longer(-Date, names_to = "Maturity", values_to = "Rate")
+
+p_raw <- ggplot(raw_long, aes(x = Date, y = Rate, color = Maturity)) +
+  geom_line(size = 0.8, alpha = 0.8) +
+  scale_color_manual(values = c("FEDFUNDS" = "#20639B", "DGS2" = "#3CAEA3", "DGS10" = "#F6D55C")) +
+  theme_minimal(base_size = 11) +
+  labs(
+    title = "Raw Term Structure Deformations",
+    y = "Interest Rate (%)",
+    x = NULL
+  ) +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold"))
+
+# --- 3. PANEL B: LITTERMAN-SCHEINKMAN FACTORS & INFLATION STATE ---
+# Expanded selection to include both real level transformations and the inflation rate
+factors_long <- macro_enriched %>%
+  select(Date, Level, Slope, Curvature) %>%
+  pivot_longer(-Date, names_to = "Coordinate", values_to = "Value")
+
+# Enforce a logical ordering for the facet layout
+factors_long$Coordinate <- factor(
+  factors_long$Coordinate, 
+  levels = c("Level", "Slope", "Curvature")
+)
+
+p_factors <- ggplot(factors_long, aes(x = Date, y = Value, color = Coordinate)) +
+  geom_line(size = 0.8, alpha = 0.8) +
+  scale_color_manual(values = c(
+    "Level"         = "#D14949", # Nominal baseline
+    "Slope"         = "#3F51B5", # Spread
+    "Curvature"     = "#4CAF50"  # Twist
+
+  )) +
+  facet_wrap(~Coordinate, scales = "free_y", ncol = 1) +
+  theme_minimal(base_size = 11) +
+  labs(
+    title = "Litterman-Scheinkman components",
+    subtitle = "",
+    y = "Coordinate Value / Rate (%)",
+    x = "Date"
+  ) +
+  theme(
+    legend.position = "none", 
+    plot.title = element_text(face = "bold"), 
+    strip.text = element_text(face = "bold")
+  )
+
+# --- 4. RENDER STRUCTURE PLOT ---
+grid.arrange(p_raw, p_factors, ncol = 2)
+```
+
+## Dynamics
+
+**NCE**: Assumes shifts in "the" rate are parallel and exogenous — everything moves together. 
+ 
+ 1. Transition (Conservative): The curve transitions uniformly. Short-rate models treat the entire curve as a single string pulled by a central mean-reverting anchor.
+ 2. Grouped Context of Transitions: Macroeconomic adjustments are uniform. A shift in central bank policy alters the short-term rate, and that change transfers linearly up the maturity spectrum, maintaining rigid, parallel tracking across `FEDFUNDS`, `DGS2`, and `DGS10`.
+
+**NCE (extended — factor decomposition):** Allows the curve to twist (short end rising while the long end holds, or vice versa), which the single-scalar CAPM model above can't represent, but which is still just a richer *linear* decomposition of the same equilibrium object.
+ 
+ 1. Transition (Conservative, higher-dimensional): The curve moves via non-parallel but still linear factor rotation. For example, during an aggressive central bank tightening cycle, FEDFUNDS shoots up, DGS2 spikes violently due to medium-term policy stress, while DGS10 lags behind due to long-term economic deceleration.
+ 2. Grouped Transitions: Systemic rate movements are grouped by their geometric deformations (Litterman & Scheinkman, 1991 [4]). Movements are re-expressed along the curve's Level, Slope, and Curvature axes and act as macroeconomic filters that alter the valuation dynamics of specific assets (e.g., separating capital between pure liquidity proxies like `BTC-USD` and debt-laden operational equities like `UAL`) - but the *mechanism* generating those movements here is still an orthogonal factor rotation, not agent feedback or path dependence.
+
+
+```{r}
+# --- DATA PREPARATION & MACRO FACTOR DECOMPOSITION ---
+# Extract assets, interest rates, and inflation context into a unified matrix
+macro_enriched <- master_df %>%
+  select(
+    Date,
+    FEDFUNDS, 
+    DGS2, 
+    DGS10,
+    CPIAUCSL,
+    UAL = UAL.LogAdj, 
+    PAL = PAL.LogAdj, 
+    BTC = `BTC-USD.LogAdj`, 
+    SPY = SPY.LogAdj
+  ) %>%
+  # Carry forward monthly CPI to daily observations to prevent data gaps
+  mutate(CPIAUCSL = zoo::na.locf(CPIAUCSL, na.rm = FALSE)) %>%
+  drop_na() %>%
+  mutate(
+    # Calculate Year-over-Year Inflation (Assumes monthly input. If daily, change lag to 252)
+    Inflation_YoY = (CPIAUCSL / lag(CPIAUCSL, 12) - 1) * 100,
+    
+    # Calculate Nominal Litterman-Scheinkman Factors
+    Level = (FEDFUNDS + DGS2 + DGS10) / 3,
+    Slope = DGS10 - FEDFUNDS,
+    Curvature = DGS10 - (2 * DGS2) + FEDFUNDS,
+    
+    # Calculate Real Level (Deflated Baseline)
+    Real_Level = Level - Inflation_YoY
+  ) %>%
+  drop_na()
+
+# --- COINTEGRATION TEST (JOHANSEN) ---
+# Verify if nominal yield maturities share a locked, stationary equilibrium
+rate_matrix <- macro_enriched %>% select(FEDFUNDS, DGS2, DGS10)
+johansen_test <- ca.jo(rate_matrix, type = "trace", ecdet = "none", K = 2)
+
+# --- MULTI-FACTOR REGRESSION SENSITIVITY ---
+# Analyze asymmetric asset elasticities against nominal factors and inflation shocks
+assets <- c("UAL", "PAL", "BTC", "SPY")
+expanded_sensitivity <- data.frame()
+
+for (asset in assets) {
+  formula_str <- paste(asset, "~ Level + Slope + Curvature + Inflation_YoY")
+  fit <- lm(as.formula(formula_str), data = macro_enriched)
+  
+  fit_summary <- tidy(fit, conf.int = TRUE) %>%
+    mutate(Asset = asset) %>%
+    filter(term != "(Intercept)")
+  
+  expanded_sensitivity <- rbind(expanded_sensitivity, fit_summary)
+}
+
+jo_txt   <- paste(capture.output(summary(johansen_test)), collapse = "\n")
+sens_txt <- paste(capture.output(print(expanded_sensitivity %>% select(Asset, term, estimate, statistic, p.value))), collapse = "\n")
+
+formatted_output <- sprintf("
+=========================================
+        COINTEGRATION (PARALLELISM)    
+=========================================
+%s
+
+=========================================
+     ASYMMETRIC SENSITIVITIES (LS + CPI)  
+=========================================
+%s", 
+jo_txt, 
+sens_txt
+)
+
+cat(formatted_output)
+
+```
+
+```{r}
+# Merge VIX back in to color the trajectory by market stress/regime
+macro_dynamics <- macro_enriched %>%
+  left_join(select(master_df, Date, VIX = VIX.Adjusted), by = "Date") %>%
+  drop_na()
+
+# Plot the state-space trajectory
+ggplot(macro_dynamics, aes(x = Level, y = Slope)) +
+  # Draw the sequential historical path
+  geom_path(aes(color = VIX), size = 0.6, alpha = 0.6) +
+  # Highlight the starting and ending points of the macro-regime
+  geom_point(data = filter(macro_dynamics, Date == min(Date)), color = "blue", size = 4, shape = 17) +
+  geom_point(data = filter(macro_dynamics, Date == max(Date)), color = "red", size = 4, shape = 15) +
+  # Color scale mapping market fear/regime
+  scale_color_gradientn(
+    colors = c("#20639B", "#F6D55C", "#D14949"), 
+    name = "VIX (Systemic Stress)"
+  ) +
+  annotate("text", x = min(macro_dynamics$Level), y = max(macro_dynamics$Slope), 
+           label = "▲ Blue Triangle: Path Start\n■ Red Square: Path End", 
+           hjust = 0, vjust = 1, size = 3, fontface = "italic") +
+  theme_minimal(base_size = 12) +
+  labs(
+    title = "Yield Curve Trajectory in Macro Phase Space",
+    subtitle = "Systemic path-dependent evolution: Level (Altitude) vs. Slope (Spread)",
+    x = "System Level (Average Interest Rate)",
+    y = "System Slope (DGS10 - FEDFUNDS)"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "right"
+  )
+```
+
+## Inference
+
+**NCE**: Checks if a single discount rate is adequate for valuing any asset. 
+ 
+ 1. Evidence: Multivariate Cointegration and Parallelism Test running a Johansen cointegration test across the interest rate vector $[\text{FEDFUNDS}, \text{DGS2}, \text{DGS10}]$ to verify if the spatial distance between maturities remains strictly locked in a parallel, stationary equilibrium over time ($H_0: \Delta\text{Slope} = 0 \text{ and } \Delta\text{Curvature} = 0$).
+ 2. Decision Rule:
+    - **IF** the rates are cointegrated with stationary spreads **AND** the changes in Slope and Curvature coordinates do not deviate significantly from zero over time:
+      - Then NCE discounting is vindicated. The term structure can be safely compressed into a single baseline number representing the global cost of capital without losing valuation accuracy.
+    - **IF** the cointegration relationships fail **OR** the spreads display structural non-stationarity and frequent non-parallel shifts:
+      - Then the NCE single-scalar model introduces systemic mispricing. A single interest rate variable cannot accurately capture the multi-dimensional macro risk backdrop.
+ 3. Verdict: Null Hypothesis Rejected. The Johansen trace test rejects the null hypothesis of zero cointegrating vectors ($r = 0$) with a test statistic of $57.73$ (far exceeding the $1\%$ critical value of $37.22$). However, it confirms exactly $r = 1$ cointegrating relationship ($r \le 1$ statistic of $5.34$ is well below the $10\%$ critical value of $15.66$). While the rates share a single long-term stochastic drift, they are not bound in a rigid, parallel structure. Because $r < 2$, the spreads (Slope and Curvature) are free to dynamically warp, twist, and invert over time. Compressing this dynamic system into a single flat $r_f$ scalar ignores these major structural twists and introduces massive pricing distortions.
+ 
+ 
+**NCE (extended — factor decomposition):** Checks if a firm's or asset's rate sensitivity depends on which part of the curve it's exposed to (e.g., BTC-USD's rate sensitivity behaves differently than UAL's, which carries real duration-like debt exposure). This is still an equilibrium-econometric question - "does this linear factor model have non-zero, asset-specific coefficients" - not yet a claim about feedback or emergent structure.
+ 
+ 1. Evidence: 3-Factor Regression Elasticity Test running rolling multivariate linear regressions of asset log returns against the individual, orthogonal coordinates of $\text{Level}_t$, $\text{Slope}_t$, and $\text{Curvature}_t$ under varying inflation (`CPIAUCSL`) backdrops.
+ 2. Decision Rule:
+    - **IF** individual assets display highly asymmetrical, statistically significant elasticities to specific factors (e.g., `BTC-USD` reacting intensely to short-end `FEDFUNDS`/`DGS2` liquidity transformations, while `UAL` is tied strictly to long-end `DGS10` Slope developments):
+      - Then the NCE-extended multi-factor view is validated over the single-scalar CAPM baseline. The macro environment still behaves as a (higher-dimensional) equilibrium object, but a single discount rate is the wrong reduction of it - different assets load on different, independently priced factors.
+    - **IF** all asset sensitivities are uniform across Level, Slope, and Curvature variables, or if multi-factor sensitivities lack statistical significance:
+      - Then the macro environment behaves symmetrically, and separating the term structure into sub-components adds no predictive value over the single-scalar CAPM baseline.
+ 3. Verdict: Null Hypothesis is NOT Rejected. Empirical asset elasticity plot reveals stark, asymmetric, and highly polarized responses to yield curve transformations.
+ 
+```{r}
+# --- 1. PREPARE DATA ---
+macro_data <- master_df %>%
+  select(
+    Date,
+    FEDFUNDS, DGS2, DGS10,
+    UAL = UAL.LogAdj, 
+    PAL = PAL.LogAdj, 
+    BTC = `BTC-USD.LogAdj`, 
+    SPY = SPY.LogAdj
+  ) %>%
+  drop_na() %>%
+  mutate(
+    Level = (FEDFUNDS + DGS2 + DGS10) / 3,
+    Slope = DGS10 - FEDFUNDS,
+    Curvature = DGS10 - (2 * DGS2) + FEDFUNDS
+  )
+
+# --- 2. STATISTICAL TESTS & AUTOMATED HYPOTHESIS SUMMARY ---
+
+# Test A: Johansen Cointegration Test
+rate_matrix <- macro_data %>% select(FEDFUNDS, DGS2, DGS10)
+johansen_res <- ca.jo(rate_matrix, type = "trace", ecdet = "none", K = 2)
+jo_summary <- summary(johansen_res)
+
+# Dynamically extract Johansen values for automated decision making
+r0_stat <- jo_summary@teststat[1]      # Test statistic for r <= 0
+r0_crit <- jo_summary@cval[1, "5pct"]  # 5% critical value for r <= 0
+r1_stat <- jo_summary@teststat[2]      # Test statistic for r <= 1
+r1_crit <- jo_summary@cval[2, "5pct"]  # 5% critical value for r <= 1
+
+if (r0_stat > r0_crit) {
+  if (r1_stat > r1_crit) {
+    jo_decision <- "REJECT H0 (Accept H1 for high cointegration)"
+    jo_meaning  <- "Rates are locked in a strict parallel structure. Spreads are completely stationary."
+  } else {
+    jo_decision <- "REJECT H0 for r=0, FAIL TO REJECT H0 for r<=1"
+    jo_meaning  <- "Exactly 1 cointegrating vector exists. Spreads (Slope and Curvature) are free to dynamically warp and twist over time. Compressing this into a single flat rate introduces systemic pricing distortions."
+  }
+} else {
+  jo_decision <- "FAIL TO REJECT H0 (No Cointegration)"
+  jo_meaning  <- "No stable long-term relationship exists between these interest rates. Spreads wander randomly."
+}
+
+# Test B: Nested F-Test / ANOVA for each asset
+assets <- c("UAL", "PAL", "BTC", "SPY")
+inference_test_matrix <- data.frame()
+
+for (asset in assets) {
+  fit_full <- lm(as.formula(paste(asset, "~ Level + Slope + Curvature")), data = macro_data)
+  fit_reduced <- lm(as.formula(paste(asset, "~ Level")), data = macro_data)
+  
+  anova_test <- anova(fit_reduced, fit_full)
+  f_stat <- anova_test$F[2]
+  p_val  <- anova_test$`Pr(>F)`[2]
+  
+  # Programmatic evaluation of the hypothesis choice and meaning
+  hyp_selected <- ifelse(p_val < 0.05, "Alternative (H1) Supported", "Null (H0) Supported")
+  meaning_text <- ifelse(p_val < 0.05, 
+                         "Curve shape changes (Slope/Curvature) carry unique, asymmetric risk explanatory power. Reduced CAPM models fail.", 
+                         "Curve deformations do not matter. The asset responds purely to basic parallel shifts in the interest rate.")
+  
+  inference_test_matrix <- rbind(inference_test_matrix, data.frame(
+    Asset = asset,
+    F_Stat = round(f_stat, 2),
+    p_Val = round(p_val, 4),
+    Decision = hyp_selected,
+    Meaning = meaning_text
+  ))
+}
+
+# --- 3. PRINT POLISHED INFRASTRUCTURE SUMMARY VIA SPRINTF ---
+
+# Flatten the asset test matrix into a text string for display
+asset_summary_txt <- paste(
+  apply(inference_test_matrix, 1, function(row) {
+    sprintf("Asset: %s | F-Stat: %s | p-value: %s\n  Decision: %s\n  Meaning:  %s\n", 
+            row['Asset'], row['F_Stat'], row['p_Val'], row['Decision'], row['Meaning'])
+  }), 
+  collapse = "\n"
+)
+
+formatted_output <- sprintf("
+================================================================================
+HYPOTHESIS SUMMARY REPORT
+================================================================================
+
+TEST 1: JOHANSEN COINTEGRATION (Term Structure Stability)
+--------------------------------------------------------------------------------
+* Test Statistic (r <= 0): %0.2f  (5%% Critical Value: %0.2f)
+* Test Statistic (r <= 1): %0.2f  (5%% Critical Value: %0.2f)
+
+* Selected Verdict: %s
+* Financial Meaning: 
+  %s
+
+
+TEST 2: NESTED MULTI-FACTOR F-TESTS (Asymmetric Asset Elasticities)
+--------------------------------------------------------------------------------
+Null Hypothesis (H0): Slope and Curvature coefficients equal zero (Level is enough).
+Alternative (H1): Deformations carry unique, independent pricing power.
+
+%s
+================================================================================
+", 
+r0_stat, r0_crit, r1_stat, r1_crit, 
+jo_decision, 
+jo_meaning, 
+asset_summary_txt)
+
+cat(formatted_output)
+```
+
+## Synthesis
+The Macro Baseline represents our widest analytical lens, mapping the foundational environment that underpins all asset classes. Evaluating Level, Slope, and Curvature alongside inflation shows that the macroeconomy is *not* well described by a single flat cost of capital - but the richer description we've built so far (Litterman-Scheinkman factors, asymmetric elasticities) is still an equilibrium, orthogonal-factor account: a bigger NCE model, not yet a CAS one. If the data reveals non-parallel twists and highly localized asset sensitivities, it confirms that macro risk is structural and curve-geometry-dependent - but *structural* here still means "more dimensions of the same kind of linear object," which is a distinct claim from the CAS thesis that the term structure behaves as a dissipative, path-dependent, feedback-driven system. That distinction, and what would actually be needed to test the latter, is explored in the Footnote below rather than resolved here.
+

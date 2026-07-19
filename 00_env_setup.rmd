@@ -1,0 +1,45 @@
+# Package Installation
+
+
+```{r global-setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r set-environment-dependencies}
+required_packages <- c(
+  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr", "stringr", "ggplot2", "plotly", "e1071", "tseries", "pracma", "htmltools", "zoo", "viridisLite", "lubridate", "ggcorrplot", "ggnetwork", "igraph", "gridExtra", "kableExtra", "psych", "urca", "broom", "tidyverse", "TDA", "webshot2", "urca", "fUnitRoots"
+
+)
+
+missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+
+if (length(missing_packages) > 0) {
+  cat("Installing missing dependencies:", paste(missing_packages, collapse = ", "), "\n")
+  install.packages(missing_packages)
+}
+
+invisible(lapply(required_packages, library, character.only = TRUE))
+```
+
+
+# Global Variables
+
+Set up the following dates:
+```{r set-date}
+start_date <- as.Date("2019-12-01")
+end_date <- as.Date("2025-12-31")
+```
+
+
+```{r set-names}
+# Resolve the e1071 vs moments function conflict explicitly
+# We enforce the 'moments' package versions for standard econometric properties
+skewness <- moments::skewness
+kurtosis <- moments::kurtosis
+
+# Explicitly instantiate the pipe operator if tidyverse initialization glitched
+`%>%` <- magistr_pipe <- dplyr::`%>%`
+
+# Verify baseline configurations to silence downstream warnings
+options(xts.warn_dplyr_breaks_lag = FALSE)
+```
