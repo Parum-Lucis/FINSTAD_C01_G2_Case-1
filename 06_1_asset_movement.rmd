@@ -59,16 +59,12 @@ for (asset in asset_list) {
       values_to = "Value"
     ) %>%
     mutate(Metric = gsub(paste0(asset, "_"), "", Metric)) %>%
-    # Explicitly enforce the structural order of the moments via factor levels
     mutate(Metric = factor(Metric, levels = c("roll_mean", "roll_var", "roll_skew", "roll_kurt")))
-  
-  # Dynamic variance threshold (2 standard deviations above its mean) for asset scaling
   asset_var_df <- filter(plot_df, Metric == "roll_var")
   var_threshold <- mean(asset_var_df$Value, na.rm = TRUE) + (2 * sd(asset_var_df$Value, na.rm = TRUE))
 
   p_structure <- ggplot(plot_df, aes(x = Date, y = Value, color = Metric)) +
     geom_line(alpha = 0.7) +
-    # The facets will now stack in your specific factor level order
     facet_wrap(~Metric, scales = "free_y", ncol = 1) +
     
     # 1. Kurtosis Threshold Lines
@@ -76,17 +72,14 @@ for (asset in asset_list) {
                aes(yintercept = 3.5), color = "firebrick", linetype = "dashed", alpha = 0.8) +
     geom_hline(data = filter(plot_df, Metric == "roll_kurt"), 
                aes(yintercept = 2.5), color = "firebrick", linetype = "dashed", alpha = 0.8) +
-    
     # 2. Skewness Threshold Lines
     geom_hline(data = filter(plot_df, Metric == "roll_skew"), 
                aes(yintercept = 1.0), color = "darkorange", linetype = "dashed", alpha = 0.8) +
     geom_hline(data = filter(plot_df, Metric == "roll_skew"), 
                aes(yintercept = -1.0), color = "darkorange", linetype = "dashed", alpha = 0.8) +
-    
     # 3. Variance Threshold Line
     geom_hline(data = filter(plot_df, Metric == "roll_var"), 
                aes(yintercept = var_threshold), color = "purple", linetype = "dashed", alpha = 0.8) +
-    
     theme_minimal() +
     labs(
       title = paste(asset, "Structural State: Rolling Moments (21-Day)"),
@@ -99,9 +92,7 @@ for (asset in asset_list) {
 }
 
 tagout_nce <- tagList(price_structure_plot_list)
-
-save_html(tagout_nce, file="asset_movement_structure_nce.html")
-
+asset_mv_str_nce <- "asset_mv_str_nce.html"
 tagout_nce
 ```
 
@@ -131,7 +122,6 @@ Additionally, we use **acceleration** rather than geometric curvature for this s
 rolling_window_size <- 21
 logadj_cols <- names(master_df)[str_detect(names(master_df), "\\.LogAdj$")]
 
-# --- 1. FINITE-DIFFERENCE PHASE EMBEDDING GENERATION (variable names kept as jet_bundle_* for continuity with downstream chunks) ---
 jet_bundle_raw <- master_df %>%
   select(Date, all_of(logadj_cols)) %>%
   rename_with(~ str_replace(.x, "\\.LogAdj$", ".Position"), all_of(logadj_cols)) %>%
@@ -142,8 +132,6 @@ jet_bundle_raw <- master_df %>%
            .names = "{str_remove(.col, '\\\\.Position')}.Acceleration")
   )
 
-
-# --- 2. MULTI-DIMENSIONAL ROLLING MOMENT COMPUTATION ---
 rolled_phase_space <- jet_bundle_raw %>%
   pivot_longer(
     cols = -Date,
@@ -161,8 +149,6 @@ rolled_phase_space <- jet_bundle_raw %>%
   filter(!is.na(mean)) %>%
   select(-value)
 
-
-# --- 3. RESHAPE & CALCULATE LEAD (NEXT POINT) ACCELERATION ---
 phase_space_4d <- rolled_phase_space %>%
   pivot_wider(
     names_from = Dimension,
@@ -184,11 +170,8 @@ price_structure_plot_list <- list()
 unique_assets <- unique(phase_space_4d$Asset)
 
 for (asset in unique_assets) {  
-  
-  # 1. Reshape the wide phase_space_4d so we can map Dimensions and Moments cleanly
   plot_df <- phase_space_4d %>%
     filter(Asset == asset) %>%
-    # Select Date and all calculated moment variables
     select(Date, matches("^(Position|Velocity|Acceleration)_")) %>% 
     pivot_longer(
       cols = -Date,
@@ -199,8 +182,6 @@ for (asset in unique_assets) {
     # Enforce structural ordering of the statistical moments
     mutate(Metric = factor(Metric, levels = c("mean", "var", "skew", "kurt")))
   
-  # 2. Extract asset-dimension specific variances for dynamic volatility thresholds
-  # This calculates a unique +2 SD line for Position_var, Velocity_var, and Acceleration_var
   var_thresholds <- plot_df %>%
     filter(Metric == "var") %>%
     group_by(Dimension) %>%
@@ -247,10 +228,17 @@ for (asset in unique_assets) {
 }
 
 tagout_cas <- htmltools::tagList(price_structure_plot_list)
-
-save_html(tagout_cas, file="asset_movement_structure_cas.html")
+asset_mv_str_cas <- "asset_mv_str_cas.html"
+save_html(tagout_cas, file=asset_mv_str_cas)
+webshot(
+  url = asset_mv_str_cas,
+  file = "asset_mv_str_cas.png",
+  vwidth = 900,   
+  vheight = 600   
+)
 
 tagout_cas
+
 ```
 
 **Output**:
