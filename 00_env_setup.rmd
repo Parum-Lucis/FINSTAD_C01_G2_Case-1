@@ -7,7 +7,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r set-environment-dependencies}
 required_packages <- c(
-  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr", "stringr", "ggplot2", "plotly", "e1071", "tseries", "pracma", "htmltools", "zoo", "viridisLite", "lubridate", "ggcorrplot", "ggnetwork", "igraph", "gridExtra", "kableExtra", "psych", "urca", "broom", "tidyverse", "TDA", "webshot2"
+  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr", "stringr", "ggplot2", "plotly", "e1071", "tseries", "pracma", "htmltools", "zoo", "viridisLite", "lubridate", "ggcorrplot", "ggnetwork", "igraph", "gridExtra", "kableExtra", "psych", "urca", "broom", "tidyverse", "TDA", "webshot2", "urca", "fUnitRoots"
+
 )
 
 missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]

@@ -148,15 +148,20 @@ This directly invokes Litterman & Scheinkman's (1991) three-factor principal-com
 ```{r}
 # --- 1. DATA ENRICHMENT ---
 macro_enriched <- master_df %>%
-  select(Date, FEDFUNDS, DGS2, DGS10) %>%
+  select(Date, FEDFUNDS, DGS2, DGS10, CPIAUCSL) %>%
+  # Carry forward monthly CPI to daily observations if dataframe is daily
+  mutate(CPIAUCSL = zoo::na.locf(CPIAUCSL, na.rm = FALSE)) %>%
   drop_na() %>%
   mutate(
+    
+    # Calculate Nominal Factors
     Level = (FEDFUNDS + DGS2 + DGS10) / 3,
     Slope = DGS10 - FEDFUNDS,
-    Curvature = DGS10 - (2 * DGS2) + FEDFUNDS
-  )
+    Curvature = DGS10 - (2 * DGS2) + FEDFUNDS,
+  ) %>%
+  drop_na()
 
-# --- 2. PANEL A: RAW TERM STRUCTURE (NCE vs. Reality) ---
+# --- 2. PANEL A: RAW TERM STRUCTURE ---
 raw_long <- macro_enriched %>%
   select(Date, FEDFUNDS, DGS2, DGS10) %>%
   pivot_longer(-Date, names_to = "Maturity", values_to = "Rate")
@@ -167,29 +172,44 @@ p_raw <- ggplot(raw_long, aes(x = Date, y = Rate, color = Maturity)) +
   theme_minimal(base_size = 11) +
   labs(
     title = "Raw Term Structure Deformations",
-    subtitle = "Non-parallel shifts and inversions (Shattering NCE Parallelism)",
     y = "Interest Rate (%)",
     x = NULL
   ) +
   theme(legend.position = "bottom", plot.title = element_text(face = "bold"))
 
-# --- 3. PANEL B: NCE COORDINATE COMPRESSION (LITTERMAN-SCHEINKMAN 3-FACTOR) ---
+# --- 3. PANEL B: LITTERMAN-SCHEINKMAN FACTORS & INFLATION STATE ---
+# Expanded selection to include both real level transformations and the inflation rate
 factors_long <- macro_enriched %>%
   select(Date, Level, Slope, Curvature) %>%
   pivot_longer(-Date, names_to = "Coordinate", values_to = "Value")
 
+# Enforce a logical ordering for the facet layout
+factors_long$Coordinate <- factor(
+  factors_long$Coordinate, 
+  levels = c("Level", "Slope", "Curvature")
+)
+
 p_factors <- ggplot(factors_long, aes(x = Date, y = Value, color = Coordinate)) +
   geom_line(size = 0.8, alpha = 0.8) +
-  scale_color_manual(values = c("Level" = "#D14949", "Slope" = "#3F51B5", "Curvature" = "#4CAF50")) +
+  scale_color_manual(values = c(
+    "Level"         = "#D14949", # Nominal baseline
+    "Slope"         = "#3F51B5", # Spread
+    "Curvature"     = "#4CAF50"  # Twist
+
+  )) +
   facet_wrap(~Coordinate, scales = "free_y", ncol = 1) +
   theme_minimal(base_size = 11) +
   labs(
-    title = "NCE Extended Coordinates (Litterman-Scheinkman Factors)",
-    subtitle = "Decomposed system states over time",
-    y = "Coordinate Value",
+    title = "Litterman-Scheinkman components",
+    subtitle = "",
+    y = "Coordinate Value / Rate (%)",
     x = "Date"
   ) +
-  theme(legend.position = "none", plot.title = element_text(face = "bold"), strip.text = element_text(face = "bold"))
+  theme(
+    legend.position = "none", 
+    plot.title = element_text(face = "bold"), 
+    strip.text = element_text(face = "bold")
+  )
 
 # --- 4. RENDER STRUCTURE PLOT ---
 grid.arrange(p_raw, p_factors, ncol = 2)
@@ -209,59 +229,77 @@ grid.arrange(p_raw, p_factors, ncol = 2)
 
 
 ```{r}
-# --- 1. DATA PREPARATION ---
-# Extracting interest rate and macro variables
-macro_data <- master_df %>%
+# --- DATA PREPARATION & MACRO FACTOR DECOMPOSITION ---
+# Extract assets, interest rates, and inflation context into a unified matrix
+macro_enriched <- master_df %>%
   select(
     Date,
     FEDFUNDS, 
     DGS2, 
     DGS10,
+    CPIAUCSL,
     UAL = UAL.LogAdj, 
     PAL = PAL.LogAdj, 
     BTC = `BTC-USD.LogAdj`, 
     SPY = SPY.LogAdj
   ) %>%
-  drop_na()
-
-# --- 2. NCE-EXTENDED YIELD CURVE FACTOR DECOMPOSITION ---
-macro_enriched <- macro_data %>%
+  # Carry forward monthly CPI to daily observations to prevent data gaps
+  mutate(CPIAUCSL = zoo::na.locf(CPIAUCSL, na.rm = FALSE)) %>%
+  drop_na() %>%
   mutate(
+    # Calculate Year-over-Year Inflation (Assumes monthly input. If daily, change lag to 252)
+    Inflation_YoY = (CPIAUCSL / lag(CPIAUCSL, 12) - 1) * 100,
+    
+    # Calculate Nominal Litterman-Scheinkman Factors
     Level = (FEDFUNDS + DGS2 + DGS10) / 3,
     Slope = DGS10 - FEDFUNDS,
-    Curvature = DGS10 - (2 * DGS2) + FEDFUNDS
-  )
+    Curvature = DGS10 - (2 * DGS2) + FEDFUNDS,
+    
+    # Calculate Real Level (Deflated Baseline)
+    Real_Level = Level - Inflation_YoY
+  ) %>%
+  drop_na()
 
-# --- 3. NCE COINTEGRATION TEST (JOHANSEN) ---
-# Testing if the term structure exhibits stationary, parallel spreads over time
+# --- COINTEGRATION TEST (JOHANSEN) ---
+# Verify if nominal yield maturities share a locked, stationary equilibrium
 rate_matrix <- macro_enriched %>% select(FEDFUNDS, DGS2, DGS10)
 johansen_test <- ca.jo(rate_matrix, type = "trace", ecdet = "none", K = 2)
 
-# --- 4. NCE-EXTENDED MULTI-FACTOR REGRESSION SENSITIVITY ---
-# We analyze how asymmetric asset elasticities are relative to Level, Slope, and Curvature
+# --- MULTI-FACTOR REGRESSION SENSITIVITY ---
+# Analyze asymmetric asset elasticities against nominal factors and inflation shocks
 assets <- c("UAL", "PAL", "BTC", "SPY")
-sensitivity_results <- data.frame()
+expanded_sensitivity <- data.frame()
 
 for (asset in assets) {
-  formula_str <- paste(asset, "~ Level + Slope + Curvature")
+  formula_str <- paste(asset, "~ Level + Slope + Curvature + Inflation_YoY")
   fit <- lm(as.formula(formula_str), data = macro_enriched)
-  fit_summary <- tidy(fit) %>%
+  
+  fit_summary <- tidy(fit, conf.int = TRUE) %>%
     mutate(Asset = asset) %>%
     filter(term != "(Intercept)")
   
-  sensitivity_results <- rbind(sensitivity_results, fit_summary)
+  expanded_sensitivity <- rbind(expanded_sensitivity, fit_summary)
 }
 
-# --- 5. PRINT RESULTS FOR INFERENCE ---
-cat("=========================================\n")
-cat("      NCE COINTEGRATION (PARALLELISM)    \n")
-cat("=========================================\n")
-print(summary(johansen_test))
+jo_txt   <- paste(capture.output(summary(johansen_test)), collapse = "\n")
+sens_txt <- paste(capture.output(print(expanded_sensitivity %>% select(Asset, term, estimate, statistic, p.value))), collapse = "\n")
 
-cat("\n=========================================\n")
-cat("    NCE-EXTENDED ASYMMETRIC SENSITIVITIES (LS)    \n")
-cat("=========================================\n")
-print(sensitivity_results %>% select(Asset, term, estimate, statistic, p.value))
+formatted_output <- sprintf("
+=========================================
+        COINTEGRATION (PARALLELISM)    
+=========================================
+%s
+
+=========================================
+     ASYMMETRIC SENSITIVITIES (LS + CPI)  
+=========================================
+%s", 
+jo_txt, 
+sens_txt
+)
+
+cat(formatted_output)
+
 ```
 
 ```{r}
@@ -339,59 +377,99 @@ macro_data <- master_df %>%
     Curvature = DGS10 - (2 * DGS2) + FEDFUNDS
   )
 
-# --- 2. STATISTICAL TESTS ---
+# --- 2. STATISTICAL TESTS & AUTOMATED HYPOTHESIS SUMMARY ---
 
-# NCE Cointegration Test (Johansen)
+# Test A: Johansen Cointegration Test
 rate_matrix <- macro_data %>% select(FEDFUNDS, DGS2, DGS10)
 johansen_res <- ca.jo(rate_matrix, type = "trace", ecdet = "none", K = 2)
+jo_summary <- summary(johansen_res)
 
-cat("--- NCE Johansen Cointegration Test Summary ---\n")
-print(summary(johansen_res))
+# Dynamically extract Johansen values for automated decision making
+r0_stat <- jo_summary@teststat[1]      # Test statistic for r <= 0
+r0_crit <- jo_summary@cval[1, "5pct"]  # 5% critical value for r <= 0
+r1_stat <- jo_summary@teststat[2]      # Test statistic for r <= 1
+r1_crit <- jo_summary@cval[2, "5pct"]  # 5% critical value for r <= 1
 
-# NCE-Extended Multi-Factor Elasticities
-assets <- c("UAL", "PAL", "BTC", "SPY")
-reg_results <- data.frame()
-
-for (asset in assets) {
-  formula_str <- paste(asset, "~ Level + Slope + Curvature")
-  fit <- lm(as.formula(formula_str), data = macro_data)
-  
-  # Extract estimates with standard errors and confidence intervals
-  fit_clean <- tidy(fit, conf.int = TRUE) %>%
-    filter(term != "(Intercept)") %>%
-    mutate(Asset = asset)
-  
-  reg_results <- rbind(reg_results, fit_clean)
+if (r0_stat > r0_crit) {
+  if (r1_stat > r1_crit) {
+    jo_decision <- "REJECT H0 (Accept H1 for high cointegration)"
+    jo_meaning  <- "Rates are locked in a strict parallel structure. Spreads are completely stationary."
+  } else {
+    jo_decision <- "REJECT H0 for r=0, FAIL TO REJECT H0 for r<=1"
+    jo_meaning  <- "Exactly 1 cointegrating vector exists. Spreads (Slope and Curvature) are free to dynamically warp and twist over time. Compressing this into a single flat rate introduces systemic pricing distortions."
+  }
+} else {
+  jo_decision <- "FAIL TO REJECT H0 (No Cointegration)"
+  jo_meaning  <- "No stable long-term relationship exists between these interest rates. Spreads wander randomly."
 }
 
-# --- 3. PLOT INFERENCE: ASYMMETRIC ELASTICITIES ---
-# This plot maps coefficient values with 95% confidence intervals,
-# highlighting that different assets are exposed to completely different parts of the curve.
-p_inference <- ggplot(reg_results, aes(x = term, y = estimate, color = Asset)) +
-  geom_point(position = position_dodge(width = 0.5), size = 2.5) +
-  geom_errorbar(
-    aes(ymin = conf.low, ymax = conf.high), 
-    position = position_dodge(width = 0.5), 
-    width = 0.2, 
-    size = 0.8
-  ) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "black", alpha = 0.5) +
-  scale_color_manual(values = c("UAL" = "#20639B", "PAL" = "#3CAEA3", "BTC" = "#F6D55C", "SPY" = "#D14949")) +
-  theme_minimal(base_size = 11) +
-  labs(
-    title = "Asymmetric Asset Elasticities to Macro Factors",
-    subtitle = "Elasticity coefficients with 95% Confidence Intervals (NCE-Extended)",
-    x = "Litterman-Scheinkman Factor (Term Structure)",
-    y = "Sensitivity Coefficient (Change in Asset Returns per 1% Shift)"
-  ) +
-  theme(
-    plot.title = element_text(face = "bold"),
-    axis.text = element_text(face = "bold"),
-    legend.position = "right"
-  )
+# Test B: Nested F-Test / ANOVA for each asset
+assets <- c("UAL", "PAL", "BTC", "SPY")
+inference_test_matrix <- data.frame()
 
-# Render the inference plot
-print(p_inference)
+for (asset in assets) {
+  fit_full <- lm(as.formula(paste(asset, "~ Level + Slope + Curvature")), data = macro_data)
+  fit_reduced <- lm(as.formula(paste(asset, "~ Level")), data = macro_data)
+  
+  anova_test <- anova(fit_reduced, fit_full)
+  f_stat <- anova_test$F[2]
+  p_val  <- anova_test$`Pr(>F)`[2]
+  
+  # Programmatic evaluation of the hypothesis choice and meaning
+  hyp_selected <- ifelse(p_val < 0.05, "Alternative (H1) Supported", "Null (H0) Supported")
+  meaning_text <- ifelse(p_val < 0.05, 
+                         "Curve shape changes (Slope/Curvature) carry unique, asymmetric risk explanatory power. Reduced CAPM models fail.", 
+                         "Curve deformations do not matter. The asset responds purely to basic parallel shifts in the interest rate.")
+  
+  inference_test_matrix <- rbind(inference_test_matrix, data.frame(
+    Asset = asset,
+    F_Stat = round(f_stat, 2),
+    p_Val = round(p_val, 4),
+    Decision = hyp_selected,
+    Meaning = meaning_text
+  ))
+}
+
+# --- 3. PRINT POLISHED INFRASTRUCTURE SUMMARY VIA SPRINTF ---
+
+# Flatten the asset test matrix into a text string for display
+asset_summary_txt <- paste(
+  apply(inference_test_matrix, 1, function(row) {
+    sprintf("Asset: %s | F-Stat: %s | p-value: %s\n  Decision: %s\n  Meaning:  %s\n", 
+            row['Asset'], row['F_Stat'], row['p_Val'], row['Decision'], row['Meaning'])
+  }), 
+  collapse = "\n"
+)
+
+formatted_output <- sprintf("
+================================================================================
+HYPOTHESIS SUMMARY REPORT
+================================================================================
+
+TEST 1: JOHANSEN COINTEGRATION (Term Structure Stability)
+--------------------------------------------------------------------------------
+* Test Statistic (r <= 0): %0.2f  (5%% Critical Value: %0.2f)
+* Test Statistic (r <= 1): %0.2f  (5%% Critical Value: %0.2f)
+
+* Selected Verdict: %s
+* Financial Meaning: 
+  %s
+
+
+TEST 2: NESTED MULTI-FACTOR F-TESTS (Asymmetric Asset Elasticities)
+--------------------------------------------------------------------------------
+Null Hypothesis (H0): Slope and Curvature coefficients equal zero (Level is enough).
+Alternative (H1): Deformations carry unique, independent pricing power.
+
+%s
+================================================================================
+", 
+r0_stat, r0_crit, r1_stat, r1_crit, 
+jo_decision, 
+jo_meaning, 
+asset_summary_txt)
+
+cat(formatted_output)
 ```
 
 ## Synthesis

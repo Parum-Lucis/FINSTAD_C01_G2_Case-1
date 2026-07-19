@@ -7,12 +7,7 @@ Here, we view how the relationships of the assets moves in the economies they ar
  
  Here, we utilize Markowitz’s Modern Portfolio Theory (MPT) and the foundations of Sharpe’s Capital Asset Pricing Model (CAPM). Risk is fully quantified by the variance-covariance matrix ($\Sigma$), assuming structural errors or shifts are merely random, zero-mean Gaussian noise around a permanent equilibrium.
  
- 1. **Raw Input**: Co-moving daily log returns matrix for UAL, PAL, BTC-USD, and SPY.
- 2. **Enriched State**: A static sample covariance matrix ($\Sigma$) calculated across the entire dataset.
- 3. **Compression**: A single cross-asset correlation scalar ($\rho_{i,j}$) per asset pair.
- 
 ```{r}
-# --- 1. Standard Data Extraction ---
 returns_only <- master_df %>% 
   select(
     UAL = UAL.LogAdj, 
@@ -22,13 +17,9 @@ returns_only <- master_df %>%
   ) %>% 
   drop_na()
 
-# --- 2. Calculate Standard Matrices ---
-# Just pure, unadulterated base R matrices
 cov_matrix <- cov(returns_only)
 cor_matrix <- cor(returns_only)
 
-# --- 3. Print Standard Text Outputs ---
-# These will render as regular, readable code blocks in your Rmd
 cat("### Covariance Matrix (Sigma)\n")
 print(round(cov_matrix, 6))
 
@@ -51,7 +42,7 @@ ggcorrplot(
 This builds on Bouchaud’s Law of Endogenous Correlation Breakdown[b1], which proves that cross-asset dependencies are non-stationary, state-dependent, and governed by systemic feedback loops. Rather than viewing correlation shifts as statistical noise, the system recognizes them as distinct geometric structures. High-volatility matrices represent entirely separate topological charts on the market manifold that cannot be smoothly mapped using a single, global Euclidean average.
  
  1. Raw Input: Daily log returns matrix for UAL, PAL, BTC-USD, SPY, and the daily conditioning regime marker VIX.
- 2. Enriched State: Conditional, rolling covariance matrices $\Sigma_t \vert{} \text{VIX}_t$, explicitly split into separate geometric charts.
+ 2. Enriched State: Conditiona covariance matrices $\Sigma_t \vert{} \text{VIX}_t$, explicitly split into separate charts.
  3. Compression: Partitioned states mapped into distinct manifolds: Low-VIX Chart ($\text{VIX} \le 25\text{th percentile}$) and High-VIX Chart ($\text{VIX} \ge 75\text{th percentile}$).
 
 
@@ -70,19 +61,14 @@ cas_prepared <- master_df %>%
   ) %>%
   drop_na()
 
-# 2. Compute the conditioning thresholds (25th and 75th percentiles of VIX)
 vix_25 <- quantile(cas_prepared$VIX, 0.25, na.rm = TRUE)
 vix_75 <- quantile(cas_prepared$VIX, 0.75, na.rm = TRUE)
-
-# 3. Partition the dataset into separate topological charts
 low_vix_returns <- cas_prepared %>% filter(VIX <= vix_25) %>% select(UAL, PAL, BTC, SPY)
 high_vix_returns <- cas_prepared %>% filter(VIX >= vix_75) %>% select(UAL, PAL, BTC, SPY)
-
-# 4. Calculate the separate, conditional correlation objects
 cor_low_vix  <- cor(low_vix_returns)
 cor_high_vix <- cor(high_vix_returns)
 
-# 5. Plot them side-by-side to visualize the "Endogenous Correlation Breakdown"
+# Plot them side-by-side to visualize the "Endogenous Correlation Breakdown"
 library(gridExtra)
 
 plot_low <- ggcorrplot(
@@ -92,7 +78,6 @@ plot_low <- ggcorrplot(
   title = paste("Low-VIX Chart (VIX <=", round(vix_25, 1), ")"),
   colors = c("#20639B", "white", "#D14949")
 )
-
 plot_high <- ggcorrplot(
   cor_high_vix, 
   type = "full", 
@@ -101,21 +86,19 @@ plot_high <- ggcorrplot(
   colors = c("#20639B", "white", "#D14949")
 )
 
-# Render side-by-side comparison
 grid.arrange(plot_low, plot_high, ncol = 2)
 ```
 
 
 ## Dynamics
 
-**NCE**: 
+### Invariance of Risk
 
-Assumes correlations are stationary and static — the relationship between UAL and SPY today is the same relationship in a crash.  Diversification is permanent.
+Assumes correlations are stationary and static — the relationship between UAL and SPY today is the same relationship in a crash.  Diversification is permanent. Therefore, the evolution in the asset relationship variance transitions over time are deterministic. When looked as a whole, multiple assets' evolution are modeled as permanently coupled geometric Brownian motions. Co-movements scale symmetrically across all economic cycles, treating structural changes as impossible.
 
- 1. Transitions (Conservative): Portfolio variance transitions over time are deterministic.
- 2. Grouped Context of Transitions: Multiple assets' cross-dynamics are modeled as permanently coupled geometric Brownian motions. Co-movements scale symmetrically across all economic cycles, treating structural changes as impossible.
+###
 
-**CAS**: Correlations are regime-dependent and tend to converge upward precisely during stress where diversification "disappears" when you need it most.
+Correlations are regime-dependent and tend to converge upward precisely during stress where diversification "disappears" when you need it most.
  
  1. Transitions (Diffusion): Systemic risk behaves like a thermodynamic fluid following a Non-equilibrium Dissipation. In calm regimes or low-VIX, the flow is Symplectic (information-conserving, asset pairs preserve their unique orthogonal vectors). When a threshold is crossed (e.g., a high-VIX shock), margin calls and liquidations force a massive energy transfer (entropy bleed).
  2. Grouped Context of Transitions: Asset transitions are grouped into distinct market volatility regimes. Under high-volatility environments (conditioned by a high `VIX` threshold), individual asset behaviors lose their unique degrees of freedom, and correlations across completely different asset classes (e.g., `UAL`, `PAL`, and `BTC-USD`) shift simultaneously. 
@@ -153,21 +136,19 @@ plot_mst <- function(mst_data, title_text) {
   ggplot(mst_data, aes(x = x, y = y, xend = xend, yend = yend)) +
     geom_edges(color = "grey50", alpha = 0.7, size = 1) +
     # Edge labels show the physical "distance" (closer to 0 means higher correlation)
-    geom_edgetext(aes(label = round(weight, 2)), color = "darkblue", fill = "white", size = 3) +
-    geom_nodes(color = "firebrick", size = 8) +
-    geom_nodetext(aes(label = name), color = "white", fontface = "bold", size = 3) +
+    geom_edgetext(aes(label = round(weight, 2)), color = "darkblue", fill = "white", size = 4) +
+    geom_nodes(color = "firebrick", size = 12) +
+    geom_nodetext(aes(label = name), color = "white", size = 4) +
     theme_blank() +
     labs(title = title_text)
 }
 
 grid.arrange(
-  plot_mst(mst_low, "Low-VIX MST (Tranquil System Skeleton)"),
-  plot_mst(mst_high, "High-VIX MST (Stressed System Skeleton)"),
+  plot_mst(mst_low, "Low-VIX MST"),
+  plot_mst(mst_high, "High-VIX MST"),
   ncol = 2
 )
-```
 
-```{r}
 # --- 1. SETUP PARAMETERS ---
 roll_window <- 21
 dates <- unique(cas_prepared$Date)[roll_window:nrow(cas_prepared)]
@@ -230,13 +211,121 @@ ggplot(network_evolution, aes(x = Date)) +
   scale_color_manual(values = c("forestgreen", "darkred")) +
   theme_minimal() +
   labs(
-    title = "Systemic Phase Transitions: Rolling Network Compression vs. Market Fear",
-    subtitle = "Safe from NA errors",
+    title = "Rolling Network Compression vs. Market Fear",
     x = "Date",
     color = "Metric"
   ) +
   theme(legend.position = "bottom")
 ```
+
+```{r}
+# --- 1. SETUP PARAMETERS ---
+roll_window <- 21
+assets <- c("UAL", "PAL", "BTC", "SPY")
+
+# Initialize expanded data frame to capture both MST and H1 TDA metrics
+tda_network_metrics <- data.frame(
+  Date = as.Date(character()), 
+  Mean_Distance = numeric(), 
+  Diameter = numeric(),
+  H1_Loop_Count = numeric(),       # Number of multi-asset cycles formed
+  Max_H1_Persistence = numeric(),  # Lifespan of the most robust cycle
+  Total_H1_Persistence = numeric() # Aggregate structural fragmentation metric
+)
+
+# --- 2. RUN ROLLING FILTRATION LOOP ---
+for (i in roll_window:nrow(cas_prepared)) {
+  
+  # Extract localized window returns
+  window_data <- cas_prepared[(i - roll_window + 1):i, assets]
+  window_date <- cas_prepared$Date[i]
+  
+  # Clean NA data and verify variance boundaries
+  window_data_clean <- na.omit(window_data)
+  has_variance <- all(sapply(window_data_clean, sd) > 0)
+  
+  if (nrow(window_data_clean) >= 10 && has_variance) {
+    
+    # Compute correlation and map to metric space distance
+    r_matrix <- cor(window_data_clean)
+    d_matrix <- sqrt(2 * (1 - r_matrix))
+    d_matrix[is.na(d_matrix)] <- 2 # Max distance boundary override
+    
+    # --- MST SKELETON CALCULATIONS ---
+    g_full    <- graph_from_adjacency_matrix(d_matrix, mode = "undirected", weighted = TRUE, diag = FALSE)
+    g_mst     <- minimum.spanning.tree(g_full, weights = E(g_full)$weight)
+    mean_dist <- mean(E(g_mst)$weight) 
+    diameter_val <- diameter(g_mst, directed = FALSE, weights = E(g_mst)$weight) 
+    
+    # --- TDA PERSISTENT HOMOLOGY CALCULATIONS (H1) ---
+    # Compute the persistence diagram via Vietoris-Rips filtration over the distance matrix
+    vr_diag <- ripsDiag(
+      X = d_matrix,
+      maxdimension = 1,           # Track H0 (clusters) and H1 (loops)
+      maxscale = 2.0,             # Max theoretical distance in this metric space
+      dist = "arbitrary",         # Inform package we are passing a raw distance matrix
+      printProgress = FALSE
+    )
+    
+    # Extract the diagram matrix
+    diag_matrix <- vr_diag$diagram
+    
+    # Filter strictly for H1 features (dimension == 1)
+    h1_features <- diag_matrix[diag_matrix[, "dimension"] == 1, , drop = FALSE]
+    
+    if (nrow(h1_features) > 0) {
+      # Persistence = Death Scale - Birth Scale
+      persistence_lifespans <- h1_features[, "Death"] - h1_features[, "Birth"]
+      
+      h1_count <- nrow(h1_features)
+      max_h1_pers <- max(persistence_lifespans)
+      total_h1_pers <- sum(persistence_lifespans)
+    } else {
+      # No loops detected in this window
+      h1_count <- 0
+      max_h1_pers <- 0
+      total_h1_pers <- 0
+    }
+    
+    # Append combined metrics
+    tda_network_metrics <- rbind(tda_network_metrics, data.frame(
+      Date = window_date,
+      Mean_Distance = mean_dist,
+      Diameter = diameter_val,
+      H1_Loop_Count = h1_count,
+      Max_H1_Persistence = max_h1_pers,
+      Total_H1_Persistence = total_h1_pers
+    ))
+  }
+}
+
+# Merge topology metrics with market fear index
+tda_evolution <- tda_network_metrics %>%
+  left_join(select(cas_prepared, Date, VIX), by = "Date")
+
+# --- 3. VISUALIZE MULTI-ASSET LOOP DESTRUCTION VS VIX ---
+ggplot(tda_evolution, aes(x = Date)) +
+  geom_line(aes(y = Total_H1_Persistence, color = "Total H1 Loop Persistence (Fragmentation)"), size = 1) +
+  geom_line(aes(y = VIX / 100, color = "VIX Level (Scaled)"), size = 1, linetype = "dashed") +
+  scale_y_continuous(
+    name = "Total H1 Persistence Length",
+    sec.axis = sec_axis(~ . * 100, name = "VIX Level")
+  ) +
+  scale_color_manual(values = c("darkorchid", "darkred")) +
+  theme_minimal() +
+  labs(
+    title = "H1 Loop Lifespans vs. Market Stress",
+    subtitle = "Tracking how systemic shocks plug structural holes in the asset manifold",
+    x = "Date",
+    color = "Metric"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+During the massive volatility spikes in early 2020 (COVID-19 crash) and early 2025, the purple line collapses and pins itself to exactly 0. When the VIX spikes, institutional de-risking, margin calls, and forced liquidations act as a singular, dominant macro force. This force connects all assets (UAL, PAL, BTC-USD, SPY) simultaneously. The global risk factor instantly "plugs" the structural holes in the asset manifold. Because every asset becomes highly correlated with every other asset, multi-dimensional loops cannot form or survive.
+
+Look closely at late 2023 through mid-2024. The VIX drops to its lowest historical baseline in the sample (around 10–15). Simultaneously, the purple line erupts with its densest concentration of high spikes. In a quiet market, the asset manifold is highly fragmented. Assets are no longer bound by a single, overriding macro driver, allowing long-lived topological loops ($H_1$ cycles) to open and persist across wide distance scales. Sector-specific dynamics, idiosyncratic asset behaviors, and independent capital flows are dominating the system. The market is healthy, decoupled, and operating with high degrees of freedom. During these purple spikes, traditional portfolio diversification is performing at maximum efficiency.
+
 
 ## Inference
 
@@ -261,45 +350,50 @@ R_High     <- cor(high_vix_returns)
 
 n_low  <- nrow(low_vix_returns)
 n_high <- nrow(high_vix_returns)
+
 # Test 1: Jennrich Test for Correlation Matrix Equality
 # H0: R_Low = R_High (Correlation structures are identical across regimes)
 jennrich_test <- psych::cortest.jennrich(R1 = R_Low, R2 = R_High, n1 = n_low, n2 = n_high)
 
-cat("--- 1. Jennrich Test for Correlation Matrix Equality ---\n")
-cat("Chi-Square Statistic :", round(jennrich_test$chi, 4), "\n")
-cat("Degrees of Freedom   :", jennrich_test$df, "\n")
-cat("p-value              :", format.pval(jennrich_test$p, digits = 4), "\n")
+nce_result <-paste0("--- 1. Jennrich Test for Correlation Matrix Equality ---\n",
+    "Chi-Square Statistic :", round(jennrich_test$chi, 4), "\n",
+    "Degrees of Freedom   :", jennrich_test$df, "\n",
+    "p-value              :", format.pval(jennrich_test$p, digits = 4), "\n")
 
 if (jennrich_test$p <= 0.05) {
-  cat("VERDICT: REJECT H0. The correlation matrix is non-stationary and regime-dependent.\n\n")
+  nce_result <- paste0(nce_result, "VERDICT: REJECT H0. The correlation matrix is non-stationary and regime-dependent.\n\n")
 } else {
-  cat("VERDICT: FAIL TO REJECT H0. The correlation matrix is stationary.\n\n")
+  nce_result <- paste0(nce_result, "VERDICT: FAIL TO REJECT H0. The correlation matrix is stationary.\n\n")
 }
 
 # Test 2: Augmented Dickey-Fuller (ADF) Test on MST Mean Distance
 # H0: The rolling MST Mean Distance has a unit root (is non-stationary)
 # we clean NA values for the time series test
 rolling_distances <- na.omit(network_evolution$Mean_Distance)
-adf_result <- tseries::adf.test(rolling_distances, alternative = "stationary")
-
-cat("--- 2. ADF Test on Rolling MST Mean Distance ---\n")
-cat("Dickey-Fuller Stat   :", round(adf_result$statistic, 4), "\n")
-cat("Lag Parameter        :", adf_result$parameter, "\n")
-
-# Safe check for NA or empty p-value
-p_val_adf <- adf_result$p.value # Note: tseries uses p.value, not p
+adf_result <- urca::ur.df(rolling_distances, type = "drift", selectlags = "AIC")
+df_stat    <- adf_result@teststat[1, 1]
+lag_param  <- adf_result@lags
+p_val_adf  <- urca::punitroot(df_stat, trend = "c", statistic = "t")
+nce_result <- paste0(nce_result,
+  "--- 2. ADF Test on Rolling MST Mean Distance ---\n",
+  "Dickey-Fuller Stat    : ", round(df_stat, 4), "\n",
+  "Lag Parameter         : ", lag_param, "\n"
+)
 
 if (length(p_val_adf) == 0 || is.na(p_val_adf)) {
-  cat("p-value              : NA (Inconclusive due to series properties)\n")
-  cat("VERDICT: INCONCLUSIVE. The test could not resolve stationarity.\n\n")
+  nce_result <- paste0(nce_result, 
+    "p-value              : NA (Inconclusive due to series properties)\n",
+    "VERDICT: INCONCLUSIVE. The test could not resolve stationarity.\n\n")
 } else {
-  cat("p-value              :", format.pval(p_val_adf, digits = 4), "\n")
+  nce_result <- paste0(nce_result, "p-value              : ", format.pval(p_val_adf, digits = 4), "\n")
   if (p_val_adf <= 0.05) {
-    cat("VERDICT: STATIONARY. The rolling network skeleton fluctuates around a constant mean.\n\n")
+    nce_result <- paste0(nce_result, "VERDICT: STATIONARY. The rolling network skeleton fluctuates around a constant mean.\n\n")
   } else {
-    cat("VERDICT: NON-STATIONARY. The network skeleton exhibits structural drift/memory.\n\n")
+    nce_result <- paste0(nce_result, "VERDICT: NON-STATIONARY. The network skeleton exhibits structural drift/memory.\n\n")
   }
 }
+
+cat(nce_result)
 ```
 
  3. Verdict: `TBD`
@@ -323,8 +417,9 @@ if (length(p_val_adf) == 0 || is.na(p_val_adf)) {
 # Measures the absolute distance between the two regime charts in state-space
 frobenius_norm <- norm(Sigma_Low - Sigma_High, type = "F")
 
-cat("--- 1. Frobenius Norm of Covariance Differences ---\n")
-cat("Frobenius Distance (||Sigma_Low - Sigma_High||_F):", round(frobenius_norm, 6), "\n\n")
+frob_out <- paste0(
+  "--- 1. Frobenius Norm of Covariance Differences ---\n",
+  "Frobenius Distance (||Sigma_Low - Sigma_High||_F):", round(frobenius_norm, 6), "\n\n")
 
 # Test 2: Topological Network Compression Test (Pearson's r)
 # H0: Correlation(MST Mean Distance, VIX) >= 0 (No compression under stress)
@@ -336,15 +431,16 @@ pearson_test <- cor.test(
   method = "pearson"
 )
 
-cat("--- 2. Pearson Test: Network Distance vs. Market Fear (VIX) ---\n")
-cat("Correlation (r)      :", round(pearson_test$estimate, 4), "\n")
-cat("t-statistic          :", round(pearson_test$statistic, 4), "\n")
-cat("p-value              :", format.pval(pearson_test$p, digits = 4), "\n")
+frob_out <- paste0(frob_out,
+    "--- 2. Pearson Test: Network Distance vs. Market Fear (VIX) ---\n",
+    "Correlation (r)      :", round(pearson_test$estimate, 4), "\n",
+    "t-statistic          :", round(pearson_test$statistic, 4), "\n",
+    "p-value              :", pearson_test$p, "\n")
 
 if (pearson_test$p <= 0.05 && pearson_test$estimate < -0.3) {
-  cat("VERDICT: VALIDATED. Massive, statistically significant network contraction during fear spikes.\n\n")
+  frob_out <- paste0(frob_out,"VERDICT: VALIDATED. Massive, statistically significant network contraction during fear spikes.\n\n")
 } else {
-  cat("VERDICT: REJECTED. No meaningful relationship between network structure and market fear.\n\n")
+  frob_out <- paste0(frob_out,"VERDICT: REJECTED. No meaningful relationship between network structure and market fear.\n\n")
 }
 
 # Test 3: MST Diameter Contraction Comparison
@@ -358,16 +454,18 @@ g_high <- minimum.spanning.tree(graph_from_adjacency_matrix(dist_high, mode = "u
 diameter_low  <- diameter(g_low, directed = FALSE, weights = E(g_low)$weight)
 diameter_high <- diameter(g_high, directed = FALSE, weights = E(g_high)$weight)
 
-cat("--- 3. MST Network Diameter Comparison ---\n")
-cat("Low-VIX MST Diameter :", round(diameter_low, 4), "\n")
-cat("High-VIX MST Diameter:", round(diameter_high, 4), "\n")
+
+frob_out <- paste0(frob_out, "--- 3. MST Network Diameter Comparison ---\n",
+                   "Low-VIX MST Diameter :", round(diameter_low, 4), "\n",
+                   "High-VIX MST Diameter:", round(diameter_high, 4), "\n")
 
 if (diameter_high < diameter_low) {
   percent_contraction <- ((diameter_low - diameter_high) / diameter_low) * 100
-  cat("VERDICT: VALIDATED. Network diameter contracted by", round(percent_contraction, 2), "% under stress.\n\n")
+  frob_out <- paste0(frob_out, "VERDICT: VALIDATED. Network diameter contracted by", round(percent_contraction, 2), "% under stress.\n\n")
 } else {
-  cat("VERDICT: REJECTED. Network diameter did not contract under stress.\n\n")
+  frob_out <- paste0(frob_out,"VERDICT: REJECTED. Network diameter did not contract significantly under stress.\n\n")
 }
+cat(frob_out)
 ```
 
 
