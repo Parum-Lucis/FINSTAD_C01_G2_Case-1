@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r set-environment-dependencies}
 required_packages <- c(
-  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr","stringr", "ggplot2", "quantmod"
+  "tidyr", "dplyr", "tibble", "purrr", "moments", "quantmod", "reticulate", "httr", "jsonlite", "xts", "readr","stringr", "ggplot2", "quantmod", "ggrepel","zoo", "lubridate"
 )
 
 missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
@@ -259,87 +259,12 @@ master_df <- master_df %>%
 cat("PAL.LogAdj non-NA:", sum(!is.na(master_df$PAL.LogAdj)),
     "| PAL_masked.LogAdj non-NA:", sum(!is.na(master_df$PAL_masked.LogAdj)), "\n")
 ```
-
-```{r function-descriptive-statistics}
-# Maps a return column name back to its raw-level column name in master_df_levels; PAL_masked.LogAdj is skipped since it has no distinct level series of its own.
+```{r}
+# Helper function to map return columns back to level columns
 level_col_name <- function(ret_col) {
   if (ret_col == "PAL_masked.LogAdj") return(NA_character_)
   if (str_detect(ret_col, "\\.LogAdj$")) return(str_replace(ret_col, "\\.LogAdj$", ".Adjusted"))
-  return(ret_col)  # DGS10/FEDFUNDS/CPIAUCSL/DCOILWTICO keep the same name; only their values changed
-}
-
-analyze_instrument <- function(df, levels_df, col_name) {
-  inst_data <- df %>%
-    select(Date, Value = all_of(col_name)) %>%
-    filter(!is.na(Value))
-
-  summary_stats <- tibble(
-    Instrument = col_name,
-    Mean = mean(inst_data$Value),
-    Median = median(inst_data$Value),
-    Variance = var(inst_data$Value),
-    Std_Dev = sd(inst_data$Value),
-    Min = min(inst_data$Value),
-    Max = max(inst_data$Value),
-    Range = Max - Min,
-    Skewness = skewness(inst_data$Value),
-    Kurtosis = kurtosis(inst_data$Value)
-  ) %>%
-    mutate(across(where(is.numeric), ~round(., 4)))
-
-  cat("\n======================================================\n")
-  cat("### Daily Summary Statistics:", col_name, "\n")
-  cat("======================================================\n")
-  print(summary_stats)
-  cat("\n")
-
-  lvl_col <- level_col_name(col_name)
-  if (!is.na(lvl_col) && lvl_col %in% names(levels_df)) {
-    values_data <- levels_df %>% select(Date, Value = all_of(lvl_col)) %>% filter(!is.na(Value))
-    values_plot <- ggplot(values_data, aes(x = Date, y = Value)) +
-      geom_line(color = "darkgreen", alpha = 0.8) +
-      theme_minimal() +
-      labs(
-        title = paste("Value Time Series:", lvl_col, "(2020 - 2025)"),
-        x = "Date",
-        y = "Value"
-      ) +
-      theme(
-        plot.title = element_text(face = "bold", size = 14),
-        axis.title = element_text(face = "bold")
-      )
-    print(values_plot)
-  }
-
-  return_plot <- ggplot(inst_data, aes(x = Date, y = Value)) +
-    geom_line(color = "darkblue", alpha = 0.8) +
-    theme_minimal() +
-    labs(
-      title = paste("Daily Timeline of", col_name, "(2020 - 2025)"),
-      x = "Date",
-      y = "Value / Log Return"
-    ) +
-    theme(
-      plot.title = element_text(face = "bold", size = 14),
-      axis.title = element_text(face = "bold")
-    )
-
-  dist_plot <- ggplot(inst_data, aes(x = Value)) +
-    geom_histogram(aes(y = after_stat(density)), bins = 50, fill = "steelblue", color = "white", alpha = 0.7) +
-    geom_density(color = "darkred", linewidth = 1) +
-    theme_minimal() +
-    labs(
-      title = paste("Daily Distribution of", col_name, "(2020 - 2025)"),
-      x = "Value / Log Return",
-      y = "Density"
-    ) +
-    theme(
-      plot.title = element_text(face = "bold", size = 14),
-      axis.title = element_text(face = "bold")
-    )
-
-  print(return_plot)
-  print(dist_plot)
+  return(ret_col)
 }
 
 target_cols <- c(
@@ -355,34 +280,575 @@ target_cols <- c(
   "DCOILWTICO"
 )
 
+# Print Daily Summary Statistics
 for (col in target_cols) {
-  analyze_instrument(master_df, master_df_levels, col)
+  inst_data <- master_df %>%
+    select(Date, Value = all_of(col)) %>%
+    filter(!is.na(Value))
+
+  summary_stats <- tibble(
+    Instrument = col,
+    Mean = mean(inst_data$Value),
+    Median = median(inst_data$Value),
+    Variance = var(inst_data$Value),
+    Std_Dev = sd(inst_data$Value),
+    Min = min(inst_data$Value),
+    Max = max(inst_data$Value),
+    Range = Max - Min,
+    Skewness = skewness(inst_data$Value),
+    Kurtosis = kurtosis(inst_data$Value)
+  ) %>%
+    mutate(across(where(is.numeric), ~round(., 4)))
+
+  cat("\n======================================================\n")
+  cat("### Daily Summary Statistics:", col, "\n")
+  cat("======================================================\n")
+  print(summary_stats)
+  cat("\n")
+}
+```
+```{r}
+options(scipen = 999) # Prevent scientific notation on axes
+
+target_cols <- c(
+  "UAL.LogAdj", "PAL.LogAdj", "PAL_masked.LogAdj", "BTC-USD.LogAdj",
+  "SPY.LogAdj", "VIX.LogAdj", "DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO"
+)
+
+# 1. Compile all statistics into a single dataframe
+all_stats_list <- list()
+
+for (col in target_cols) {
+  inst_data <- master_df %>%
+    select(Date, Value = all_of(col)) %>%
+    filter(!is.na(Value))
+
+  # Calculate stats for this column and store in the list
+  all_stats_list[[col]] <- tibble(
+    Instrument = col,
+    Mean = mean(inst_data$Value, na.rm = TRUE),
+    Median = median(inst_data$Value, na.rm = TRUE),
+    Variance = var(inst_data$Value, na.rm = TRUE),
+    Std_Dev = sd(inst_data$Value, na.rm = TRUE),
+    Min = min(inst_data$Value, na.rm = TRUE),
+    Max = max(inst_data$Value, na.rm = TRUE),
+    Range = Max - Min,
+    Skewness = skewness(inst_data$Value, na.rm = TRUE),
+    Kurtosis = kurtosis(inst_data$Value, na.rm = TRUE)
+  )
+}
+
+# Bind into one master table
+all_stats_df <- bind_rows(all_stats_list)
+
+# ====================================================================
+# 2. STANDARD BAR CHARTS (Mean, Median, Var, SD, Skew, Kurtosis)
+# ====================================================================
+
+# Exclude Min, Max, and Range from the basic loop
+standard_stats <- setdiff(names(all_stats_df), c("Instrument", "Min", "Max", "Range"))
+
+for (stat in standard_stats) {
+  
+  p <- ggplot(all_stats_df, aes(x = reorder(Instrument, .data[[stat]]), y = .data[[stat]], fill = Instrument)) +
+    geom_col(alpha = 0.8, color = "black", show.legend = FALSE) +
+    # Add exact values at the end of each bar
+    geom_text(aes(label = sprintf("%.4f", .data[[stat]]), 
+                  y = ifelse(.data[[stat]] < 0, .data[[stat]] - max(abs(.data[[stat]]))*0.05, .data[[stat]] + max(abs(.data[[stat]]))*0.05)),
+              size = 3.5, fontface = "bold", color = "black") +
+    coord_flip() +
+    theme_minimal() +
+    labs(
+      title = paste("Comparison of", stat, "(2020 - 2025)"),
+      x = "Instrument",
+      y = stat
+    ) +
+    scale_y_continuous(expand = expansion(mult = c(0.15, 0.15))) +
+    theme(
+      plot.title = element_text(face = "bold", size = 14),
+      axis.title = element_text(face = "bold"),
+      axis.text.y = element_text(face = "bold")
+    )
+  
+  print(p)
+}
+
+# ====================================================================
+# 3. DIVERGING BAR CHART (Min, Max, Range)
+# ====================================================================
+
+# Create a new label combining Instrument and Range, then reorder it by Range
+diverging_data <- all_stats_df %>%
+  mutate(
+    # Append the range to the instrument name for the axis label
+    Instrument_Label = paste0(Instrument, " (Range: ", sprintf("%.4f", Range), ")"),
+    Instrument_Label = reorder(Instrument_Label, Range)
+  )
+
+# Determine the absolute max value to ensure symmetrical Y-axis expansion
+max_val <- max(abs(c(diverging_data$Min, diverging_data$Max))) * 1.25
+
+p_min_max <- ggplot(diverging_data, aes(x = Instrument_Label)) +
+  # Negative bars for Minimums (Tomato Red)
+  geom_col(aes(y = Min), fill = "tomato", alpha = 0.8, color = "black") +
+  # Positive bars for Maximums (Steel Blue)
+  geom_col(aes(y = Max), fill = "steelblue", alpha = 0.8, color = "black") +
+  
+  # Text labels for exact Min values
+  geom_text(aes(y = Min, label = sprintf("%.4f", Min)), 
+            hjust = ifelse(diverging_data$Min < 0, 1.1, -0.1), # Shift depending on pos/neg
+            size = 3.5, fontface = "bold", color = "black") +
+            
+  # Text labels for exact Max values
+  geom_text(aes(y = Max, label = sprintf("%.4f", Max)), 
+            hjust = ifelse(diverging_data$Max > 0, -0.1, 1.1), 
+            size = 3.5, fontface = "bold", color = "black") +
+             
+  # Set symmetrical limits so zero stays exactly in the middle
+  coord_flip(ylim = c(-max_val, max_val)) +
+  theme_minimal() +
+  labs(
+    title = "Diverging Min & Max Values (2020 - 2025)",
+    subtitle = "Sorted by Total Range. Min = Red, Max = Blue",
+    x = "Instrument",
+    y = "Value"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    axis.text.y = element_text(face = "bold")
+  )
+
+print(p_min_max)
+```
+
+```{r}
+for (col in target_cols) {
+  lvl_col <- level_col_name(col)
+  
+  if (!is.na(lvl_col) && lvl_col %in% names(master_df_levels)) {
+    values_data <- master_df_levels %>% 
+      select(Date, Value = all_of(lvl_col)) %>% 
+      filter(!is.na(Value)) %>%
+      arrange(Date) %>%
+      # Calculate 30-day trailing moving average
+      mutate(MA_30 = rollmean(Value, k = 30, fill = NA, align = "right"))
+      
+    values_plot <- ggplot(values_data, aes(x = Date)) +
+      # Faint raw daily line
+      geom_line(aes(y = Value), color = "darkgreen", alpha = 0.3, linewidth = 0.5) +
+      # Bold 30-day Moving Average line
+      geom_line(aes(y = MA_30), color = "darkgreen", alpha = 1, linewidth = 1.2) +
+      theme_minimal() +
+      labs(
+        title = paste("Value Time Series:", lvl_col, "(2020 - 2025)"),
+        subtitle = "30-Day Moving Average (Bold) vs Daily Value (Faint)",
+        x = "Date",
+        y = "Value"
+      ) +
+      theme(
+        plot.title = element_text(face = "bold", size = 14),
+        axis.title = element_text(face = "bold")
+      )
+      
+    print(values_plot)
+  }
 }
 ```
 
-```{r bea-return-boxplot-comparison}
-# One box plot per instrument, showing that series' own return spread/outliers.
-# Zoomed to 3x IQR beyond Q1/Q3 via coord_cartesian() for visualization purposes, but all of data is still included in computation.
+```{r}
+macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO","VIX.LogAdj")
+investable_cols <- target_cols[!target_cols %in% macro_cols]
+
+for (col in investable_cols) {
+  inst_data <- master_df %>%
+    select(Date, Value = all_of(col)) %>%
+    filter(!is.na(Value)) %>%
+    arrange(Date) %>%
+    # Calculate 30-day trailing moving average
+    mutate(MA_30 = rollmean(Value, k = 30, fill = NA, align = "right"))
+
+  return_plot <- ggplot(inst_data, aes(x = Date)) +
+    # Faint raw daily return line
+    geom_line(aes(y = Value), color = "darkblue", alpha = 0.3, linewidth = 0.5) +
+    # Bold 30-day Moving Average line
+    geom_line(aes(y = MA_30), color = "darkblue", alpha = 1, linewidth = 1.2) +
+    theme_minimal() +
+    labs(
+      title = paste("Daily Timeline of", col, "(2020 - 2025)"),
+      subtitle = "30-Day Moving Average (Bold) vs Daily Return (Faint)",
+      x = "Date",
+      y = "Log Return"
+    ) +
+    theme(
+      plot.title = element_text(face = "bold", size = 14),
+      axis.title = element_text(face = "bold")
+    )
+
+  print(return_plot)
+}
+```
+```{r,fig.width=12}
+options(scipen = 999) 
+
+macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL_masked.LogAdj")
+investable_cols <- target_cols[!target_cols %in% macro_cols]
+
+# 1. Combine all investable columns into a single long dataframe and calculate MA
+long_data <- master_df %>%
+  select(Date, all_of(investable_cols)) %>%
+  pivot_longer(cols = all_of(investable_cols), names_to = "Asset", values_to = "Return") %>%
+  filter(!is.na(Return)) %>%
+  arrange(Asset, Date) %>%
+  group_by(Asset) %>%
+  # ADDED: rollapply with FUN = mean and partial = TRUE
+  mutate(MA_90 = rollapply(Return, width = 90, FUN = mean, fill = NA, align = "right", partial = TRUE)) %>%
+  ungroup()
+
+# 2. Find the Leader (Max MA_90) for each Date
+leader_data <- long_data %>%
+  filter(!is.na(MA_90)) %>%
+  group_by(Date) %>%
+  # Keep the single highest MA for the day
+  slice_max(order_by = MA_90, n = 1, with_ties = FALSE) %>%
+  select(Date, Leader = Asset, Max_MA = MA_90) %>%
+  ungroup()
+
+# 3. Determine reasonable zoom limits based on the Moving Averages
+min_ma <- min(long_data$MA_90, na.rm = TRUE)
+max_ma <- max(long_data$MA_90, na.rm = TRUE)
+# Add a 15% visual buffer above and below the moving averages
+zoom_lower <- min_ma - abs(min_ma * 0.15)
+zoom_upper <- max_ma + abs(max_ma * 0.15)
+
+# 4. Create the Combined Plot
+combined_plot <- ggplot() +
+  # Leader Fill: Draw a colored rectangle for the leader from the bottom up to the MA line
+  geom_rect(
+    data = leader_data,
+    aes(xmin = Date - 0.5, xmax = Date + 0.5, ymin = zoom_lower, ymax = Max_MA, fill = Leader),
+    alpha = 0.25
+  ) +
+  # 90-Day Moving Average lines (bold)
+  geom_line(
+    data = long_data, 
+    aes(x = Date, y = MA_90, color = Asset), 
+    alpha = 1, linewidth = 1
+  ) +
+  theme_minimal() +
+  # Zoom in to the moving average range
+  coord_cartesian(ylim = c(zoom_lower, zoom_upper)) +
+  labs(
+    title = "Combined Asset 90-Day Moving Averages (2020 - 2025)",
+    subtitle = "Shaded area highlights the asset with the highest 90-Day Moving Average. Early periods use <90 days.",
+    x = "Date",
+    y = "90-Day MA (Log Return)",
+    color = "Asset (Lines)",
+    fill = "Leader (Shaded Area)"
+  ) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    legend.position = "right",
+    legend.title = element_text(face = "bold")
+  )
+
+print(combined_plot)
+```
+
+```{r}
+options(scipen = 999) 
+
+macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL.LogAdj")
+investable_cols <- target_cols[!target_cols %in% macro_cols]
+
+quarterly_rank_data <- master_df %>%
+  select(Date, all_of(investable_cols)) %>%
+  pivot_longer(cols = all_of(investable_cols), names_to = "Asset", values_to = "Return") %>%
+  filter(!is.na(Return)) %>%
+  mutate(Quarter_Start = yq(paste0(year(Date), "-Q", quarter(Date)))) %>%
+  group_by(Asset, Quarter_Start) %>%
+  summarise(Quarterly_Return = sum(Return, na.rm = TRUE), .groups = "drop") %>%
+  group_by(Quarter_Start) %>%
+  mutate(Rank = rank(-Quarterly_Return, ties.method = "first")) %>%
+  ungroup()
+
+rank_plot <- ggplot(quarterly_rank_data, aes(x = Quarter_Start, y = Rank, color = Asset, group = Asset)) +
+  geom_line(linewidth = 1.5, alpha = 0.8) +
+  geom_point(size = 5) +
+  # Place the rank number inside the point for readability
+  geom_text(aes(label = Rank), color = "white", size = 3, fontface = "bold") +
+  # Reverse the Y-axis so Rank 1 is at the top
+  scale_y_reverse(breaks = 1:length(investable_cols)) +
+  # Format X-axis to show Year-Quarter intervals clearly
+  scale_x_date(date_breaks = "3 months", labels = function(x) paste0(year(x), "-Q", quarter(x))) +
+  theme_minimal() +
+  labs(
+    title = "Quarterly Asset Performance Rankings",
+    subtitle = "Ranked by cumulative log return per quarter (1 = Best)",
+    x = "Quarter",
+    y = "Rank",
+    color = "Asset"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor.y = element_blank(), # Removes the decimal grid lines (e.g., 1.5, 2.5)
+    legend.position = "right",
+    legend.title = element_text(face = "bold")
+  )
+
+print(rank_plot)
+```
+
+```{r, fig.width=12}
+options(scipen = 999) 
+
+macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL_masked.LogAdj")
+investable_cols <- target_cols[!target_cols %in% macro_cols]
+
+# 1. Combine all investable columns and calculate Rolling Risk (Standard Deviation)
+long_data <- master_df %>%
+  select(Date, all_of(investable_cols)) %>%
+  pivot_longer(cols = all_of(investable_cols), names_to = "Asset", values_to = "Return") %>%
+  filter(!is.na(Return)) %>%
+  arrange(Asset, Date) %>%
+  group_by(Asset) %>%
+  # Use rollapply with sd (standard deviation) to measure volatility/risk
+  mutate(Rolling_Risk = rollapply(Return, width = 90, FUN = sd, fill = NA, align = "right", partial = TRUE)) %>%
+  ungroup()
+
+# 2. Find the Leader (Highest Risk) for each Date
+leader_data <- long_data %>%
+  filter(!is.na(Rolling_Risk)) %>%
+  group_by(Date) %>%
+  # Keep the single highest risk asset for the day
+  slice_max(order_by = Rolling_Risk, n = 1, with_ties = FALSE) %>%
+  select(Date, Leader = Asset, Max_Risk = Rolling_Risk) %>%
+  ungroup()
+
+# 3. Determine reasonable zoom limits based on the Rolling Risk
+min_risk <- min(long_data$Rolling_Risk, na.rm = TRUE)
+max_risk <- max(long_data$Rolling_Risk, na.rm = TRUE)
+# Add a 15% visual buffer, but ensure the bottom doesn't drop below 0 (risk is strictly positive)
+zoom_lower <- max(0, min_risk - abs(min_risk * 0.15))
+zoom_upper <- max_risk + abs(max_risk * 0.15)
+
+# 4. Create the Combined Plot
+combined_plot <- ggplot() +
+  # Leader Fill: Draw a colored rectangle for the most volatile asset
+  geom_rect(
+    data = leader_data,
+    aes(xmin = Date - 0.5, xmax = Date + 0.5, ymin = zoom_lower, ymax = Max_Risk, fill = Leader),
+    alpha = 0.25
+  ) +
+  # 90-Day Rolling Risk lines (bold)
+  geom_line(
+    data = long_data, 
+    aes(x = Date, y = Rolling_Risk, color = Asset), 
+    alpha = 1, linewidth = 1
+  ) +
+  theme_minimal() +
+  # Zoom in to the risk range
+  coord_cartesian(ylim = c(zoom_lower, zoom_upper)) +
+  labs(
+    title = "Combined Asset Rolling Risk (90-Day Standard Deviation)",
+    subtitle = "Shaded area under the curve highlights the most volatile asset",
+    x = "Date",
+    y = "90-Day Rolling SD (Risk)",
+    color = "Asset (Lines)",
+    fill = "Highest Risk (Shaded Area)"
+  ) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    legend.position = "right",
+    legend.title = element_text(face = "bold")
+  )
+
+print(combined_plot)
+```
+
+```{r}
+options(scipen = 999) 
+
+macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL.LogAdj")
+investable_cols <- target_cols[!target_cols %in% macro_cols]
+
+quarterly_risk_rank_data <- master_df %>%
+  select(Date, all_of(investable_cols)) %>%
+  pivot_longer(cols = all_of(investable_cols), names_to = "Asset", values_to = "Return") %>%
+  filter(!is.na(Return)) %>%
+  mutate(Quarter_Start = yq(paste0(year(Date), "-Q", quarter(Date)))) %>%
+  group_by(Asset, Quarter_Start) %>%
+  # Calculate risk (standard deviation of daily returns) for the quarter
+  summarise(Quarterly_Risk = sd(Return, na.rm = TRUE), .groups = "drop") %>%
+  group_by(Quarter_Start) %>%
+  # Rank assets for each quarter (ascending order: lowest SD gets Rank 1)
+  mutate(Rank = rank(Quarterly_Risk, ties.method = "first")) %>%
+  ungroup()
+
+risk_rank_plot <- ggplot(quarterly_risk_rank_data, aes(x = Quarter_Start, y = Rank, color = Asset, group = Asset)) +
+  geom_line(linewidth = 1.5, alpha = 0.8) +
+  geom_point(size = 5) +
+  # Place the rank number inside the point for readability
+  geom_text(aes(label = Rank), color = "white", size = 3, fontface = "bold") +
+  # Reverse the Y-axis so Rank 1 (Least Risk) is at the top
+  scale_y_reverse(breaks = 1:length(investable_cols)) +
+  # Format X-axis to show Year-Quarter intervals clearly
+  scale_x_date(date_breaks = "3 months", labels = function(x) paste0(year(x), "-Q", quarter(x))) +
+  theme_minimal() +
+  labs(
+    title = "Quarterly Asset Risk Rankings",
+    subtitle = "Ranked by standard deviation of daily log returns per quarter (1 = Least Risk)",
+    x = "Quarter",
+    y = "Rank",
+    color = "Asset"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor.y = element_blank(), # Removes the decimal grid lines
+    legend.position = "right",
+    legend.title = element_text(face = "bold")
+  )
+
+print(risk_rank_plot)
+```
+
+```{r distribution}
 for (col in target_cols) {
-  if (col %in% c("CPIAUCSL", "FEDFUNDS")) { # cleans CPI and FEDFUNDS data since they are monthly, so they are treated differently
+  inst_data <- master_df %>%
+    select(Date, Value = all_of(col)) %>%
+    filter(!is.na(Value)) %>%
+    # Standardize the data to Z-scores: (Value - Mean) / SD
+    mutate(Standardized_Value = as.numeric(scale(Value)))
+
+  dist_plot <- ggplot(inst_data, aes(x = Standardized_Value)) +
+    geom_histogram(aes(y = after_stat(density)), bins = 50, fill = "steelblue", color = "white", alpha = 0.7) +
+    geom_density(color = "darkred", linewidth = 1) +
+    theme_minimal() +
+    labs(
+      title = paste("Standardized Distribution of", col, "(2020 - 2025)"),
+      subtitle = "Z-Scores: Data centered at 0 with a Standard Deviation of 1",
+      x = "Standardized Value (Z-Score)",
+      y = "Density"
+    ) +
+    theme(
+      plot.title = element_text(face = "bold", size = 14),
+      axis.title = element_text(face = "bold")
+    )
+
+  print(dist_plot)
+}
+
+long_dist_data <- master_df %>%
+  # Select only the target columns
+  select(all_of(target_cols)) %>%
+  # Pivot to long format so we can group by Asset
+  pivot_longer(cols = everything(), names_to = "Asset", values_to = "Value") %>%
+  filter(!is.na(Value)) %>%
+  group_by(Asset) %>%
+  # Standardize the data to Z-scores: (Value - Mean) / SD
+  mutate(Standardized_Value = as.numeric(scale(Value))) %>%
+  ungroup()
+
+# 2. Plot all standardized distributions in one graph
+combined_dist_plot <- ggplot(long_dist_data, aes(x = Standardized_Value, fill = Asset, color = Asset)) +
+  # Using density instead of histogram so overlapping distributions remain readable
+  geom_density(alpha = 0.25, linewidth = 0.7) +
+  theme_minimal() +
+  # Constrain the X-axis to +/- 5 standard deviations. 
+  # This prevents massive one-off outliers (like crypto crashes) from squashing the visual bell curves
+  coord_cartesian(xlim = c(-5, 5)) +
+  labs(
+    title = "Combined Standardized Distributions (2020 - 2025)",
+    subtitle = "Z-Scores: Data centered at 0 with a Standard Deviation of 1",
+    x = "Standardized Value (Z-Score)",
+    y = "Density",
+    fill = "Instrument",
+    color = "Instrument"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    legend.position = "right",
+    legend.title = element_text(face = "bold")
+  )
+
+print(combined_dist_plot)
+```
+
+```{r boxplot-comparison}
+
+options(scipen = 999) 
+
+for (col in target_cols) {
+  # 1. Prepare data
+  if (col %in% c("CPIAUCSL", "FEDFUNDS")) {
     box_data <- df_list[[col]] %>%
       arrange(Date) %>%
       transmute(Date, Value = c(NA, diff(log(.data[[col]])))) %>%
       filter(!is.na(Value))
-    plot_label <- paste("Monthly Return Box Plot:", col, "(2020 - 2025)")
+    plot_label <- paste("Box Plot:", col, "(2020 - 2025)")
   } else {
     box_data <- master_df %>% select(Date, Value = all_of(col)) %>% filter(!is.na(Value))
-    plot_label <- paste("Return Box Plot:", col, "(2020 - 2025)")
+    plot_label <- paste("Box Plot:", col, "(2020 - 2025)")
   }
 
-  q1 <- quantile(box_data$Value, 0.25, na.rm = TRUE)
-  q3 <- quantile(box_data$Value, 0.75, na.rm = TRUE)
-  iqr <- q3 - q1
+  # 2. Calculate summary statistics
+  stats <- box_data %>%
+    summarise(
+      Min    = min(Value, na.rm = TRUE),
+      Q1     = quantile(Value, 0.25, na.rm = TRUE),
+      Median = median(Value, na.rm = TRUE),
+      Mean   = mean(Value, na.rm = TRUE),
+      Q3     = quantile(Value, 0.75, na.rm = TRUE),
+      Max    = max(Value, na.rm = TRUE)
+    )
+  
+  iqr <- stats$Q3 - stats$Q1
+  
+  # 3. Create a label dataframe for ggrepel to process all at once
+  # Using sprintf ensures strictly formatted 4-decimal floats instead of scientific notation
+  label_data <- data.frame(
+    x_pos = factor(""), 
+    y_pos = c(stats$Max, stats$Q3, stats$Median, stats$Mean, stats$Q1, stats$Min),
+    label_text = c(
+      paste("Max:", sprintf("%.4f", stats$Max)),
+      paste("Q3:", sprintf("%.4f", stats$Q3)),
+      paste("Med:", sprintf("%.4f", stats$Median)),
+      paste("Mean:", sprintf("%.4f", stats$Mean)),
+      paste("Q1:", sprintf("%.4f", stats$Q1)),
+      paste("Min:", sprintf("%.4f", stats$Min))
+    )
+  )
 
-  box_plot <- ggplot(box_data, aes(x = "", y = Value)) +
+  # 4. Generate the plot
+  box_plot <- ggplot(box_data, aes(x = factor(""), y = Value)) +
     geom_boxplot(fill = "steelblue", alpha = 0.6, outlier.color = "darkred", outlier.alpha = 0.4) +
     stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "gold", color = "black") +
-    coord_cartesian(ylim = c(q1 - 3 * iqr, q3 + 3 * iqr)) +
+    coord_cartesian(ylim = c(stats$Q1 - 3 * iqr, stats$Q3 + 3 * iqr)) +
+    
+    # Use ggrepel to place labels. 
+    # nudge_x pushes them to the right; direction = "y" keeps them vertically stacked
+    geom_text_repel(
+      data = label_data,
+      aes(x = x_pos, y = y_pos, label = label_text),
+      nudge_x = 0.45,
+      direction = "y",
+      hjust = 0,
+      segment.color = "darkgray", # Draws a faint line if the label has to move far
+      segment.size = 0.5,
+      size = 3.5,
+      fontface = c("plain", "plain", "bold", "bold", "plain", "plain"),
+      color = c("darkgray", "black", "black", "darkgoldenrod4", "black", "darkgray")
+    ) +
+    
     theme_minimal() +
     labs(
       title = plot_label,
@@ -390,9 +856,15 @@ for (col in target_cols) {
       x = NULL,
       y = "Log Return"
     ) +
+    # Force the Y-axis to also avoid scientific notation
+    scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+    # Expand the right side of the plot to make room for repelled labels
+    scale_x_discrete(expand = expansion(add = c(0.5, 1.5))) +
     theme(
       plot.title = element_text(face = "bold", size = 14),
-      axis.title = element_text(face = "bold")
+      axis.title = element_text(face = "bold"),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
     )
 
   print(box_plot)
