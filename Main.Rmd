@@ -169,7 +169,7 @@ master_df <- df_list %>%
 ```
 
 This is to detect PAL's trading halt window. PAL was suspended by PSE due to audit rule violation.
-```{r bea-pal-halt-detect}
+```{r pal-halt-detect}
 pal_native <- df_list[["PAL"]] %>% 
   arrange(Date)
 
@@ -190,7 +190,7 @@ in_pal_halt <- function(dates) {
 }
 ```
 
-```{r bea-master-df-levels-snapshot}
+```{r master-df-levels-snapshot}
 # Snapshot before log-returns converts every column to a return, so the raw levels survive for the values time series.
 master_df_levels <- master_df
 ```
@@ -249,7 +249,7 @@ master_df <- master_df %>%
 explore_instruments(instruments, master_df)
 ```
 
-```{r bea-pal-masked-column}
+```{r pal-masked-column}
 # another column is created `PAL_masked.LogAdj` where its halted dates are masked to be NA
 # this is based on PAL.LogAdj which all missing dates were forward filled,
 # they will exist alongside each other, useful for more analysis later.
@@ -259,8 +259,7 @@ master_df <- master_df %>%
 cat("PAL.LogAdj non-NA:", sum(!is.na(master_df$PAL.LogAdj)),
     "| PAL_masked.LogAdj non-NA:", sum(!is.na(master_df$PAL_masked.LogAdj)), "\n")
 ```
-```{r}
-# Helper function to map return columns back to level columns
+```{r daily-summary-statistics}
 level_col_name <- function(ret_col) {
   if (ret_col == "PAL_masked.LogAdj") return(NA_character_)
   if (str_detect(ret_col, "\\.LogAdj$")) return(str_replace(ret_col, "\\.LogAdj$", ".Adjusted"))
@@ -280,7 +279,6 @@ target_cols <- c(
   "DCOILWTICO"
 )
 
-# Print Daily Summary Statistics
 for (col in target_cols) {
   inst_data <- master_df %>%
     select(Date, Value = all_of(col)) %>%
@@ -307,15 +305,14 @@ for (col in target_cols) {
   cat("\n")
 }
 ```
-```{r}
-options(scipen = 999) # Prevent scientific notation on axes
+```{r summary-bar-charts}
+options(scipen = 999)
 
 target_cols <- c(
   "UAL.LogAdj", "PAL.LogAdj", "PAL_masked.LogAdj", "BTC-USD.LogAdj",
   "SPY.LogAdj", "VIX.LogAdj", "DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO"
 )
 
-# 1. Compile all statistics into a single dataframe
 all_stats_list <- list()
 
 for (col in target_cols) {
@@ -323,7 +320,6 @@ for (col in target_cols) {
     select(Date, Value = all_of(col)) %>%
     filter(!is.na(Value))
 
-  # Calculate stats for this column and store in the list
   all_stats_list[[col]] <- tibble(
     Instrument = col,
     Mean = mean(inst_data$Value, na.rm = TRUE),
@@ -338,14 +334,8 @@ for (col in target_cols) {
   )
 }
 
-# Bind into one master table
 all_stats_df <- bind_rows(all_stats_list)
 
-# ====================================================================
-# 2. STANDARD BAR CHARTS (Mean, Median, Var, SD, Skew, Kurtosis)
-# ====================================================================
-
-# Exclude Min, Max, and Range from the basic loop
 standard_stats <- setdiff(names(all_stats_df), c("Instrument", "Min", "Max", "Range"))
 
 for (stat in standard_stats) {
@@ -373,38 +363,26 @@ for (stat in standard_stats) {
   print(p)
 }
 
-# ====================================================================
-# 3. DIVERGING BAR CHART (Min, Max, Range)
-# ====================================================================
-
-# Create a new label combining Instrument and Range, then reorder it by Range
 diverging_data <- all_stats_df %>%
   mutate(
-    # Append the range to the instrument name for the axis label
     Instrument_Label = paste0(Instrument, " (Range: ", sprintf("%.4f", Range), ")"),
     Instrument_Label = reorder(Instrument_Label, Range)
   )
 
-# Determine the absolute max value to ensure symmetrical Y-axis expansion
 max_val <- max(abs(c(diverging_data$Min, diverging_data$Max))) * 1.25
 
 p_min_max <- ggplot(diverging_data, aes(x = Instrument_Label)) +
-  # Negative bars for Minimums (Tomato Red)
   geom_col(aes(y = Min), fill = "tomato", alpha = 0.8, color = "black") +
-  # Positive bars for Maximums (Steel Blue)
   geom_col(aes(y = Max), fill = "steelblue", alpha = 0.8, color = "black") +
   
-  # Text labels for exact Min values
   geom_text(aes(y = Min, label = sprintf("%.4f", Min)), 
-            hjust = ifelse(diverging_data$Min < 0, 1.1, -0.1), # Shift depending on pos/neg
+            hjust = ifelse(diverging_data$Min < 0, 1.1, -0.1),
             size = 3.5, fontface = "bold", color = "black") +
             
-  # Text labels for exact Max values
   geom_text(aes(y = Max, label = sprintf("%.4f", Max)), 
             hjust = ifelse(diverging_data$Max > 0, -0.1, 1.1), 
             size = 3.5, fontface = "bold", color = "black") +
              
-  # Set symmetrical limits so zero stays exactly in the middle
   coord_flip(ylim = c(-max_val, max_val)) +
   theme_minimal() +
   labs(
@@ -422,7 +400,7 @@ p_min_max <- ggplot(diverging_data, aes(x = Instrument_Label)) +
 print(p_min_max)
 ```
 
-```{r}
+```{r value-time-series}
 for (col in target_cols) {
   lvl_col <- level_col_name(col)
   
@@ -431,13 +409,10 @@ for (col in target_cols) {
       select(Date, Value = all_of(lvl_col)) %>% 
       filter(!is.na(Value)) %>%
       arrange(Date) %>%
-      # Calculate 30-day trailing moving average
       mutate(MA_30 = rollmean(Value, k = 30, fill = NA, align = "right"))
       
     values_plot <- ggplot(values_data, aes(x = Date)) +
-      # Faint raw daily line
       geom_line(aes(y = Value), color = "darkgreen", alpha = 0.3, linewidth = 0.5) +
-      # Bold 30-day Moving Average line
       geom_line(aes(y = MA_30), color = "darkgreen", alpha = 1, linewidth = 1.2) +
       theme_minimal() +
       labs(
@@ -455,8 +430,44 @@ for (col in target_cols) {
   }
 }
 ```
+```{r combined-std-vts, fig.width=12}
+options(scipen = 999) 
 
-```{r}
+valid_lvl_cols <- sapply(target_cols, level_col_name)
+valid_lvl_cols <- unique(valid_lvl_cols[!is.na(valid_lvl_cols) & valid_lvl_cols %in% names(master_df_levels)])
+
+long_levels_data <- master_df_levels %>%
+  select(Date, all_of(valid_lvl_cols)) %>%
+  pivot_longer(cols = all_of(valid_lvl_cols), names_to = "Instrument", values_to = "Value") %>%
+  filter(!is.na(Value)) %>%
+  arrange(Instrument, Date) %>%
+  group_by(Instrument) %>%
+  mutate(Standardized_Value = as.numeric(scale(Value))) %>%
+  mutate(MA_30 = rollapply(Standardized_Value, width = 30, FUN = mean, fill = NA, align = "right", partial = TRUE)) %>%
+  ungroup()
+
+combined_levels_plot <- ggplot(long_levels_data, aes(x = Date, color = Instrument)) +
+  geom_line(aes(y = Standardized_Value), alpha = 0.2, linewidth = 0.3) +
+  geom_line(aes(y = MA_30), alpha = 1, linewidth = 1) +
+  theme_minimal() +
+  labs(
+    title = "Combined Standardized Value Time Series (2020 - 2025)",
+    subtitle = "Z-Scores: 30-Day Moving Average (Bold) vs Daily Value (Faint)",
+    x = "Date",
+    y = "Standardized Value (Z-Score)",
+    color = "Instrument"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    legend.position = "right",
+    legend.title = element_text(face = "bold")
+  )
+
+print(combined_levels_plot)
+```
+
+```{r return-vts, fig.width=12}
 macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO","VIX.LogAdj")
 investable_cols <- target_cols[!target_cols %in% macro_cols]
 
@@ -488,55 +499,45 @@ for (col in investable_cols) {
   print(return_plot)
 }
 ```
-```{r,fig.width=12}
+```{r cmd-90ma-ret-vts, fig.width=12}
 options(scipen = 999) 
 
 macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL_masked.LogAdj")
 investable_cols <- target_cols[!target_cols %in% macro_cols]
 
-# 1. Combine all investable columns into a single long dataframe and calculate MA
 long_data <- master_df %>%
   select(Date, all_of(investable_cols)) %>%
   pivot_longer(cols = all_of(investable_cols), names_to = "Asset", values_to = "Return") %>%
   filter(!is.na(Return)) %>%
   arrange(Asset, Date) %>%
   group_by(Asset) %>%
-  # ADDED: rollapply with FUN = mean and partial = TRUE
   mutate(MA_90 = rollapply(Return, width = 90, FUN = mean, fill = NA, align = "right", partial = TRUE)) %>%
   ungroup()
 
-# 2. Find the Leader (Max MA_90) for each Date
 leader_data <- long_data %>%
   filter(!is.na(MA_90)) %>%
   group_by(Date) %>%
-  # Keep the single highest MA for the day
   slice_max(order_by = MA_90, n = 1, with_ties = FALSE) %>%
   select(Date, Leader = Asset, Max_MA = MA_90) %>%
   ungroup()
 
-# 3. Determine reasonable zoom limits based on the Moving Averages
 min_ma <- min(long_data$MA_90, na.rm = TRUE)
 max_ma <- max(long_data$MA_90, na.rm = TRUE)
-# Add a 15% visual buffer above and below the moving averages
 zoom_lower <- min_ma - abs(min_ma * 0.15)
 zoom_upper <- max_ma + abs(max_ma * 0.15)
 
-# 4. Create the Combined Plot
 combined_plot <- ggplot() +
-  # Leader Fill: Draw a colored rectangle for the leader from the bottom up to the MA line
   geom_rect(
     data = leader_data,
     aes(xmin = Date - 0.5, xmax = Date + 0.5, ymin = zoom_lower, ymax = Max_MA, fill = Leader),
     alpha = 0.25
   ) +
-  # 90-Day Moving Average lines (bold)
   geom_line(
     data = long_data, 
     aes(x = Date, y = MA_90, color = Asset), 
     alpha = 1, linewidth = 1
   ) +
   theme_minimal() +
-  # Zoom in to the moving average range
   coord_cartesian(ylim = c(zoom_lower, zoom_upper)) +
   labs(
     title = "Combined Asset 90-Day Moving Averages (2020 - 2025)",
@@ -557,7 +558,7 @@ combined_plot <- ggplot() +
 print(combined_plot)
 ```
 
-```{r}
+```{r rank-chart-returns, fig.width=12}
 options(scipen = 999) 
 
 macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL.LogAdj")
@@ -577,11 +578,8 @@ quarterly_rank_data <- master_df %>%
 rank_plot <- ggplot(quarterly_rank_data, aes(x = Quarter_Start, y = Rank, color = Asset, group = Asset)) +
   geom_line(linewidth = 1.5, alpha = 0.8) +
   geom_point(size = 5) +
-  # Place the rank number inside the point for readability
   geom_text(aes(label = Rank), color = "white", size = 3, fontface = "bold") +
-  # Reverse the Y-axis so Rank 1 is at the top
   scale_y_reverse(breaks = 1:length(investable_cols)) +
-  # Format X-axis to show Year-Quarter intervals clearly
   scale_x_date(date_breaks = "3 months", labels = function(x) paste0(year(x), "-Q", quarter(x))) +
   theme_minimal() +
   labs(
@@ -603,55 +601,45 @@ rank_plot <- ggplot(quarterly_rank_data, aes(x = Quarter_Start, y = Rank, color 
 print(rank_plot)
 ```
 
-```{r, fig.width=12}
+```{r cmd-90ma-risk-vts, fig.width=12}
 options(scipen = 999) 
 
 macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL_masked.LogAdj")
 investable_cols <- target_cols[!target_cols %in% macro_cols]
 
-# 1. Combine all investable columns and calculate Rolling Risk (Standard Deviation)
 long_data <- master_df %>%
   select(Date, all_of(investable_cols)) %>%
   pivot_longer(cols = all_of(investable_cols), names_to = "Asset", values_to = "Return") %>%
   filter(!is.na(Return)) %>%
   arrange(Asset, Date) %>%
   group_by(Asset) %>%
-  # Use rollapply with sd (standard deviation) to measure volatility/risk
   mutate(Rolling_Risk = rollapply(Return, width = 90, FUN = sd, fill = NA, align = "right", partial = TRUE)) %>%
   ungroup()
 
-# 2. Find the Leader (Highest Risk) for each Date
 leader_data <- long_data %>%
   filter(!is.na(Rolling_Risk)) %>%
   group_by(Date) %>%
-  # Keep the single highest risk asset for the day
   slice_max(order_by = Rolling_Risk, n = 1, with_ties = FALSE) %>%
   select(Date, Leader = Asset, Max_Risk = Rolling_Risk) %>%
   ungroup()
 
-# 3. Determine reasonable zoom limits based on the Rolling Risk
 min_risk <- min(long_data$Rolling_Risk, na.rm = TRUE)
 max_risk <- max(long_data$Rolling_Risk, na.rm = TRUE)
-# Add a 15% visual buffer, but ensure the bottom doesn't drop below 0 (risk is strictly positive)
 zoom_lower <- max(0, min_risk - abs(min_risk * 0.15))
 zoom_upper <- max_risk + abs(max_risk * 0.15)
 
-# 4. Create the Combined Plot
 combined_plot <- ggplot() +
-  # Leader Fill: Draw a colored rectangle for the most volatile asset
   geom_rect(
     data = leader_data,
     aes(xmin = Date - 0.5, xmax = Date + 0.5, ymin = zoom_lower, ymax = Max_Risk, fill = Leader),
     alpha = 0.25
   ) +
-  # 90-Day Rolling Risk lines (bold)
   geom_line(
     data = long_data, 
     aes(x = Date, y = Rolling_Risk, color = Asset), 
     alpha = 1, linewidth = 1
   ) +
   theme_minimal() +
-  # Zoom in to the risk range
   coord_cartesian(ylim = c(zoom_lower, zoom_upper)) +
   labs(
     title = "Combined Asset Rolling Risk (90-Day Standard Deviation)",
@@ -672,7 +660,7 @@ combined_plot <- ggplot() +
 print(combined_plot)
 ```
 
-```{r}
+```{r rank-chart-risk, fig.width=12}
 options(scipen = 999) 
 
 macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL.LogAdj")
@@ -684,21 +672,16 @@ quarterly_risk_rank_data <- master_df %>%
   filter(!is.na(Return)) %>%
   mutate(Quarter_Start = yq(paste0(year(Date), "-Q", quarter(Date)))) %>%
   group_by(Asset, Quarter_Start) %>%
-  # Calculate risk (standard deviation of daily returns) for the quarter
   summarise(Quarterly_Risk = sd(Return, na.rm = TRUE), .groups = "drop") %>%
   group_by(Quarter_Start) %>%
-  # Rank assets for each quarter (ascending order: lowest SD gets Rank 1)
   mutate(Rank = rank(Quarterly_Risk, ties.method = "first")) %>%
   ungroup()
 
 risk_rank_plot <- ggplot(quarterly_risk_rank_data, aes(x = Quarter_Start, y = Rank, color = Asset, group = Asset)) +
   geom_line(linewidth = 1.5, alpha = 0.8) +
   geom_point(size = 5) +
-  # Place the rank number inside the point for readability
   geom_text(aes(label = Rank), color = "white", size = 3, fontface = "bold") +
-  # Reverse the Y-axis so Rank 1 (Least Risk) is at the top
   scale_y_reverse(breaks = 1:length(investable_cols)) +
-  # Format X-axis to show Year-Quarter intervals clearly
   scale_x_date(date_breaks = "3 months", labels = function(x) paste0(year(x), "-Q", quarter(x))) +
   theme_minimal() +
   labs(
@@ -747,23 +730,16 @@ for (col in target_cols) {
 }
 
 long_dist_data <- master_df %>%
-  # Select only the target columns
   select(all_of(target_cols)) %>%
-  # Pivot to long format so we can group by Asset
   pivot_longer(cols = everything(), names_to = "Asset", values_to = "Value") %>%
   filter(!is.na(Value)) %>%
   group_by(Asset) %>%
-  # Standardize the data to Z-scores: (Value - Mean) / SD
   mutate(Standardized_Value = as.numeric(scale(Value))) %>%
   ungroup()
 
-# 2. Plot all standardized distributions in one graph
 combined_dist_plot <- ggplot(long_dist_data, aes(x = Standardized_Value, fill = Asset, color = Asset)) +
-  # Using density instead of histogram so overlapping distributions remain readable
   geom_density(alpha = 0.25, linewidth = 0.7) +
   theme_minimal() +
-  # Constrain the X-axis to +/- 5 standard deviations. 
-  # This prevents massive one-off outliers (like crypto crashes) from squashing the visual bell curves
   coord_cartesian(xlim = c(-5, 5)) +
   labs(
     title = "Combined Standardized Distributions (2020 - 2025)",
@@ -788,7 +764,6 @@ print(combined_dist_plot)
 options(scipen = 999) 
 
 for (col in target_cols) {
-  # 1. Prepare data
   if (col %in% c("CPIAUCSL", "FEDFUNDS")) {
     box_data <- df_list[[col]] %>%
       arrange(Date) %>%
@@ -800,7 +775,6 @@ for (col in target_cols) {
     plot_label <- paste("Box Plot:", col, "(2020 - 2025)")
   }
 
-  # 2. Calculate summary statistics
   stats <- box_data %>%
     summarise(
       Min    = min(Value, na.rm = TRUE),
@@ -813,8 +787,6 @@ for (col in target_cols) {
   
   iqr <- stats$Q3 - stats$Q1
   
-  # 3. Create a label dataframe for ggrepel to process all at once
-  # Using sprintf ensures strictly formatted 4-decimal floats instead of scientific notation
   label_data <- data.frame(
     x_pos = factor(""), 
     y_pos = c(stats$Max, stats$Q3, stats$Median, stats$Mean, stats$Q1, stats$Min),
@@ -828,14 +800,11 @@ for (col in target_cols) {
     )
   )
 
-  # 4. Generate the plot
   box_plot <- ggplot(box_data, aes(x = factor(""), y = Value)) +
     geom_boxplot(fill = "steelblue", alpha = 0.6, outlier.color = "darkred", outlier.alpha = 0.4) +
     stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "gold", color = "black") +
     coord_cartesian(ylim = c(stats$Q1 - 3 * iqr, stats$Q3 + 3 * iqr)) +
     
-    # Use ggrepel to place labels. 
-    # nudge_x pushes them to the right; direction = "y" keeps them vertically stacked
     geom_text_repel(
       data = label_data,
       aes(x = x_pos, y = y_pos, label = label_text),
@@ -856,9 +825,7 @@ for (col in target_cols) {
       x = NULL,
       y = "Log Return"
     ) +
-    # Force the Y-axis to also avoid scientific notation
     scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
-    # Expand the right side of the plot to make room for repelled labels
     scale_x_discrete(expand = expansion(add = c(0.5, 1.5))) +
     theme(
       plot.title = element_text(face = "bold", size = 14),
@@ -879,7 +846,7 @@ Forward-filling PAL's halted trading dates introduces extra zero-return days, wh
 names(df_list) <- instruments
 ```
 
-```{r bea-leftjoin1-pre-obs fuel-pass-through}
+```{r pre-obs fuel-pass-through}
 cat("UAL:", nrow(df_list[["UAL"]]), "rows |",
     format(min(df_list[["UAL"]]$Date)), "to", format(max(df_list[["UAL"]]$Date)), "\n")
 cat("PAL:", nrow(df_list[["PAL"]]), "rows |",
@@ -896,7 +863,8 @@ The difference in rows could be explained by the following:
 - PAL had a 285-day trading suspension imposed by the PSE between (2021-06-17 to 2022-03-28),
   as its financial statements had violated a rule. This was during COVID-19 travel restrictions.
 - DCOILWTICO is from FRED instead of a stock market trading calendar. 
-```{r bea-leftjoin1}
+
+```{r fuel-pass-through}
 fuel_leftjoin_df <- df_list[["UAL"]] %>%
   select(Date, UAL_Adjusted = `UAL.Adjusted`) %>%
   left_join(df_list[["PAL"]] %>% select(Date, PAL_Adjusted = `PAL.Adjusted`), by = "Date") %>%
@@ -920,7 +888,7 @@ print(summary(ual_fuel_model)$coefficients)
 print(summary(pal_fuel_model)$coefficients)
 ```
 
-```{r bea-leftjoin1-post-obs}
+```{r post-obs fuel-pass-through}
 ual_oil_beta <- coef(ual_fuel_model)[["WTI_ret"]]
 pal_oil_beta <- coef(pal_fuel_model)[["WTI_ret"]]
 ual_oil_p <- summary(ual_fuel_model)$coefficients["WTI_ret", "Pr(>|t|)"]
@@ -932,11 +900,13 @@ cat("PAL oil-return coefficient:", round(pal_oil_beta, 4), "| p-value:", round(p
 ```
 
 - `fuel_leftjoin_df` - PAL's price forward-filled across every gap (including weekends, holidays, and the trading suspension)
-- `fuel_leftjoin_df_masked` - weekends and holidays are forward-filled but the trading suspension is 
-```{r bea-pal-masked-companion}
+- `fuel_leftjoin_df_masked` - weekends and holidays are forward-filled but the trading suspension is
+
+```{r pal-masked-companion}
 
 # dataframe where the trading halt (285-day suspension) are masked as NA
 # this is built from the fuel_leftjoin_df which is forward-filled
+
 fuel_leftjoin_df_masked <- fuel_leftjoin_df %>%
   mutate(PAL_ret = if_else(in_pal_halt(Date), NA_real_, PAL_ret)) %>%
   filter(!is.na(PAL_ret))
@@ -949,14 +919,14 @@ cat("Naive (forward-filled) rows:", nrow(fuel_leftjoin_df), "| PAL oil-beta:", r
 cat("Masked (halt-excluded) rows:", nrow(fuel_leftjoin_df_masked), "| PAL oil-beta:", round(pal_oil_beta_masked, 4), "\n")
 ```
 
-```{r bea-innerjoin-pre-obs BTC/airline correlation}
+```{r pre-obs BTC/airline correlation}
 cat("BTC-USD:", nrow(df_list[["BTC-USD"]]), "rows | UAL:", nrow(df_list[["UAL"]]),
     "rows | PAL:", nrow(df_list[["PAL"]]), "rows\n")
 cat("inner_join keeps only the intersection -- every BTC weekend/holiday move is\n")
 cat("excluded by construction; loss is quantified explicitly below.\n")
 ```
 
-```{r bea-innerjoin}
+```{r BTC/airline correlation}
 btc_innerjoin_df <- df_list[["BTC-USD"]] %>%
   select(Date, BTC_Adjusted = `BTC-USD.Adjusted`) %>%
   inner_join(df_list[["UAL"]] %>% select(Date, UAL_Adjusted = `UAL.Adjusted`), by = "Date") %>%
@@ -976,7 +946,7 @@ cor_matrix <- cor(btc_innerjoin_df %>% select(BTC_ret, UAL_ret, PAL_ret), use = 
 print(round(cor_matrix, 4))
 ```
 
-```{r bea-innerjoin-post-obs}
+```{r post-obs BTC/airline correlation}
 btc_ual_cor <- cor_matrix["BTC_ret", "UAL_ret"]
 btc_pal_cor <- cor_matrix["BTC_ret", "PAL_ret"]
 ual_pal_cor <- cor_matrix["UAL_ret", "PAL_ret"]
@@ -987,14 +957,14 @@ cat("BTC-PAL correlation:", round(btc_pal_cor, 4), "\n")
 cat("UAL-PAL correlation:", round(ual_pal_cor, 4), "\n")
 ```
 
-```{r bea-antijoin-pre-obs}
+```{r pre-obs pal-ual-gap}
 cat("PAL:", nrow(df_list[["PAL"]]), "rows | UAL:", nrow(df_list[["UAL"]]), "rows\n")
 cat("anti_join surfaces every UAL trading day with no matching PAL date --\n")
 cat("both routine PSE holidays and the 285-day suspension. Splitting the two\n")
 cat("apart tests whether the suspension or routine calendar drift dominates.\n")
 ```
 
-```{r bea-antijoin pal-ual-gap}
+```{r pal-ual-gap}
 pal_gap_days <- df_list[["UAL"]] %>% select(Date) %>%
   anti_join(df_list[["PAL"]] %>% select(Date), by = "Date")
 
@@ -1007,7 +977,7 @@ cat("Suspension-only days:", nrow(halted_gap_days), "\n\n")
 print(holiday_gap_days, n = 10)
 ```
 
-```{r bea-antijoin-post-obs}
+```{r post-ob pal-ual-gap}
 cat("Of", nrow(pal_gap_days), "total PAL gap days, which are dates that are in UAL but are not in the PAL dataset,", nrow(halted_gap_days),
     sprintf("(%.0f%%)", 100 * nrow(halted_gap_days) / nrow(pal_gap_days)),
     "are attributable to the 285-day suspension. Note that the 285-day suspension is the total days between 2021-06-17 to 2022-03-27, which includes weekends, but because PAL and UAL does not include weekends, which is why only 196 is attributable to the suspension. \n")
@@ -1020,7 +990,7 @@ cat("Routine PSE-holiday mismatch accounts for only", nrow(holiday_gap_days), "d
 
 **Objective:** Determine whether treating PAL's 285-day trading suspension as if its price simply stayed unchanged distorts its measured returns and volatility, compared to properly excluding that period from the calculation.
 
-```{r bea-sql1}
+```{r sql1-suspension-bias}
 pal_stats_comparison <- bind_rows(
   fuel_leftjoin_df        %>% mutate(version = "Forward-filled (naive)") %>% select(version, PAL_ret),
   fuel_leftjoin_df_masked %>% mutate(version = "Halt-masked (corrected)") %>% select(version, PAL_ret)
@@ -1052,7 +1022,7 @@ In practical terms, anyone using the naive series to size a PAL position or esti
 
 **Objective:** Determine which airline, United or Philippine Airlines, carries more fuel-cost risk by comparing their sensitivity to crude oil price movements.
 
-```{r bea-sql2}
+```{r bea-sql2-oil-airline-exposure}
 oil_direction_summary <- fuel_leftjoin_df_masked %>%
   mutate(oil_direction = if_else(WTI_ret > 0, "Oil Up", "Oil Down")) %>%
   group_by(oil_direction) %>%
@@ -1077,7 +1047,7 @@ cat("PAL oil-beta:", round(pal_oil_beta_masked, 4), "| p =", round(pal_oil_p_mas
 
 **Objective:** Examine how United Airlines' sensitivity to oil prices behaved during the acute 2022 Russia-Ukraine oil shock (February 24-March 8), and assess the impact of Philippine Airlines being unable to trade during this same window.
 
-```{r bea-sql3}
+```{r bea-sql3-Russo-Ukrainian-oil-impact}
 ukraine_shock_df_all_ual <- fuel_leftjoin_df %>%
   filter(between(Date, as.Date("2022-02-24"), as.Date("2022-03-08")))
 ukraine_shock_df_pal <- fuel_leftjoin_df_masked %>%
@@ -1105,7 +1075,7 @@ print(shock_vs_full, width = Inf)
 
 **Objective:** Determine whether the fuel-cost relationship identified for United and Philippine Airlines is a stable, ongoing pattern or simply a result of the 2022 oil shock, by comparing pre-shock, shock-era, and recovery periods.
 
-```{r bea-sql4}
+```{r bea-sql4-UAL-Oil-relationship}
 period_label <- function(d) case_when(
   d < as.Date("2022-01-01") ~ "1. Pre-shock (2020-2021)",
   d < as.Date("2023-01-01") ~ "2. Shock era (2022)",
@@ -1143,7 +1113,7 @@ print(period_beta, width = Inf)
 
 **Objective:** Measure how much the correlation between United and Philippine Airlines' stock returns changes depending on how the two datasets are combined.
 
-```{r bea-sql5}
+```{r bea-sql5-UAL-PAL-correlation}
 ual_pal_fulljoin_df <- df_list[["UAL"]] %>% select(Date, UAL_Adjusted = `UAL.Adjusted`) %>%
   full_join(df_list[["PAL"]] %>% select(Date, PAL_Adjusted = `PAL.Adjusted`), by = "Date") %>%
   arrange(Date) %>%
@@ -1178,7 +1148,7 @@ cat("Strict inner_join correlation:", round(strict_cor, 4), "| N =", nrow(ual_pa
 
 **Objective:** Determine whether United and Philippine Airlines perform differently during periods of high inflation versus periods of low or moderate inflation.
 
-```{r bea-sql6}
+```{r bea-sql6-airline-cpi}
 cpi_daily <- tibble(Date = seq(min(df_list[["CPIAUCSL"]]$Date), max(fuel_leftjoin_df$Date), by = "day")) %>%
   left_join(
     df_list[["CPIAUCSL"]] %>% arrange(Date) %>% mutate(CPI_YoY = CPIAUCSL / lag(CPIAUCSL, 12) - 1) %>% select(Date, CPI_YoY),
@@ -1224,7 +1194,7 @@ print(inflation_summary, width = Inf)
 
 **Objective:** Determine how the prevailing interest rate environment (near-zero, hiking, or restrictive) affects both airlines' stock performance and their sensitivity to oil prices.
 
-```{r bea-sql7}
+```{r bea-sql7-airline-fedfunds}
 fedfunds_daily <- tibble(Date = seq(min(df_list[["FEDFUNDS"]]$Date), max(fuel_leftjoin_df$Date), by = "day")) %>%
   left_join(df_list[["FEDFUNDS"]] %>% select(Date, FedFunds = FEDFUNDS), by = "Date") %>%
   arrange(Date) %>%
