@@ -323,7 +323,7 @@ options(scipen = 999)
 
 target_cols <- c(
   "UAL.LogAdj", "PAL.LogAdj", "PAL_masked.LogAdj", "BTC-USD.LogAdj",
-  "SPY.LogAdj", "VIX.LogAdj", "DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO"
+  "SPY.LogAdj", "VIX.LogAdj", "DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "DGS2"
 )
 
 all_stats_list <- list()
@@ -351,12 +351,17 @@ all_stats_df <- bind_rows(all_stats_list)
 
 standard_stats <- setdiff(names(all_stats_df), c("Instrument", "Min", "Max", "Range"))
 
+level_scale_cols <- c("DGS10", "DGS2", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO")
+
+return_stats_df <- all_stats_df %>% filter(!Instrument %in% level_scale_cols)
+macro_stats_df  <- all_stats_df %>% filter(Instrument %in% level_scale_cols)
+# --- Comparison bar charts: return-based instruments only ---
 for (stat in standard_stats) {
-  
-  p <- ggplot(all_stats_df, aes(x = reorder(Instrument, .data[[stat]]), y = .data[[stat]], fill = Instrument)) +
+
+  p <- ggplot(return_stats_df, aes(x = reorder(Instrument, .data[[stat]]), y = .data[[stat]], fill = Instrument)) +
     geom_col(alpha = 0.8, color = "black", show.legend = FALSE) +
     # Add exact values at the end of each bar
-    geom_text(aes(label = sprintf("%.4f", .data[[stat]]), 
+    geom_text(aes(label = sprintf("%.4f", .data[[stat]]),
                   y = ifelse(.data[[stat]] < 0, .data[[stat]] - max(abs(.data[[stat]]))*0.05, .data[[stat]] + max(abs(.data[[stat]]))*0.05)),
               size = 3.5, fontface = "bold", color = "black") +
     coord_flip() +
@@ -372,11 +377,12 @@ for (stat in standard_stats) {
       axis.title = element_text(face = "bold"),
       axis.text.y = element_text(face = "bold")
     )
-  
+
   print(p)
 }
 
-diverging_data <- all_stats_df %>%
+# --- Diverging Min/Max: return series straddle zero, so this format reads right ---
+diverging_data <- return_stats_df %>%
   mutate(
     Instrument_Label = paste0(Instrument, " (Range: ", sprintf("%.4f", Range), ")"),
     Instrument_Label = reorder(Instrument_Label, Range)
@@ -387,15 +393,15 @@ max_val <- max(abs(c(diverging_data$Min, diverging_data$Max))) * 1.25
 p_min_max <- ggplot(diverging_data, aes(x = Instrument_Label)) +
   geom_col(aes(y = Min), fill = "tomato", alpha = 0.8, color = "black") +
   geom_col(aes(y = Max), fill = "steelblue", alpha = 0.8, color = "black") +
-  
-  geom_text(aes(y = Min, label = sprintf("%.4f", Min)), 
+
+  geom_text(aes(y = Min, label = sprintf("%.4f", Min)),
             hjust = ifelse(diverging_data$Min < 0, 1.1, -0.1),
             size = 3.5, fontface = "bold", color = "black") +
-            
-  geom_text(aes(y = Max, label = sprintf("%.4f", Max)), 
-            hjust = ifelse(diverging_data$Max > 0, -0.1, 1.1), 
+
+  geom_text(aes(y = Max, label = sprintf("%.4f", Max)),
+            hjust = ifelse(diverging_data$Max > 0, -0.1, 1.1),
             size = 3.5, fontface = "bold", color = "black") +
-             
+
   coord_flip(ylim = c(-max_val, max_val)) +
   theme_minimal() +
   labs(
@@ -411,6 +417,29 @@ p_min_max <- ggplot(diverging_data, aes(x = Instrument_Label)) +
   )
 
 print(p_min_max)
+
+# --- Macro & rate levels: descriptive summary in native units (not chartable
+# against returns), reported as a table instead ---
+macro_summary_table <- macro_stats_df %>%
+  transmute(
+    Series    = Instrument,
+    Min       = round(Min, 2),
+    Max       = round(Max, 2),
+    Mean      = round(Mean, 2),
+    Median    = round(Median, 2),
+    `Std Dev` = round(Std_Dev, 2),
+    Range     = round(Range, 2)
+  ) %>%
+  arrange(desc(Range))
+
+macro_summary_table %>%
+  kbl(
+    caption = "Macro &amp; Rate Levels - Descriptive Statistics, Native Units (2020 - 2025)",
+    align = c("l", rep("r", 6))
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) %>%
+  footnote(general = "Units: DGS10, DGS2 and FEDFUNDS in percent; CPIAUCSL in index points; DCOILWTICO in US dollars per barrel.",
+           general_title = "Note: ", footnote_as_chunk = TRUE)
 ```
 
 ```{r value-time-series}
@@ -481,7 +510,7 @@ print(combined_levels_plot)
 ```
 
 ```{r return-vts, fig.width=12}
-macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO","VIX.LogAdj")
+macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "DGS2")
 investable_cols <- target_cols[!target_cols %in% macro_cols]
 
 for (col in investable_cols) {
@@ -515,7 +544,7 @@ for (col in investable_cols) {
 ```{r cmd-90ma-ret-vts, fig.width=12}
 options(scipen = 999) 
 
-macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL_masked.LogAdj")
+macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL_masked.LogAdj", "DGS2")
 investable_cols <- target_cols[!target_cols %in% macro_cols]
 
 long_data <- master_df %>%
@@ -574,7 +603,7 @@ print(combined_plot)
 ```{r rank-chart-returns, fig.width=12}
 options(scipen = 999) 
 
-macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL.LogAdj")
+macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL.LogAdj", "DGS2")
 investable_cols <- target_cols[!target_cols %in% macro_cols]
 
 quarterly_rank_data <- master_df %>%
@@ -617,7 +646,7 @@ print(rank_plot)
 ```{r cmd-90ma-risk-vts, fig.width=12}
 options(scipen = 999) 
 
-macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL_masked.LogAdj")
+macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL_masked.LogAdj", "DGS2")
 investable_cols <- target_cols[!target_cols %in% macro_cols]
 
 long_data <- master_df %>%
@@ -676,7 +705,7 @@ print(combined_plot)
 ```{r rank-chart-risk, fig.width=12}
 options(scipen = 999) 
 
-macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL.LogAdj")
+macro_cols <- c("DGS10", "FEDFUNDS", "CPIAUCSL", "DCOILWTICO", "VIX.LogAdj", "PAL.LogAdj", "DGS2")
 investable_cols <- target_cols[!target_cols %in% macro_cols]
 
 quarterly_risk_rank_data <- master_df %>%
