@@ -107,10 +107,7 @@ Correlations are regime-dependent and tend to converge upward precisely during s
 ```{r}
 # --- HELPER FUNCTION: CORRELATION TO MST ---
 build_mst_df <- function(cor_matrix, layout_seed = 42) {
-  # 1. Convert correlation to distance: d = sqrt(2 * (1 - rho))
   dist_matrix <- sqrt(2 * (1 - cor_matrix))
-  
-  # 2. Create a fully connected graph from the distance matrix
   g_full <- graph_from_adjacency_matrix(
     dist_matrix, 
     mode = "undirected", 
@@ -120,8 +117,6 @@ build_mst_df <- function(cor_matrix, layout_seed = 42) {
   
   # 3. Extract the Minimum Spanning Tree (MST) using Kruskal's algorithm
   g_mst <- minimum.spanning.tree(g_full, weights = E(g_full)$weight)
-  
-  # 4. Format into a clean dataframe for ggplot/ggnetwork visualization
   set.seed(layout_seed)
   mst_net <- ggnetwork(g_mst, layout = layout_with_kk(g_mst))
   return(mst_net)
@@ -153,7 +148,6 @@ grid.arrange(
 roll_window <- 21
 dates <- unique(cas_prepared$Date)[roll_window:nrow(cas_prepared)]
 
-# Initialize empty data frame to collect metrics
 network_metrics <- data.frame(
   Date = as.Date(character()), 
   Mean_Distance = numeric(), 
@@ -165,11 +159,7 @@ for (i in roll_window:nrow(cas_prepared)) {
   # Extract window returns
   window_data <- cas_prepared[(i - roll_window + 1):i, c("UAL", "PAL", "BTC", "SPY")]
   window_date <- cas_prepared$Date[i]
-  # Remove any rows within the rolling window that contain NAs
   window_data_clean <- na.omit(window_data)
-  
-  # Ensure we still have enough data points to compute a valid correlation matrix
-  # And ensure none of the columns have zero standard deviation (which causes NaN correlations)
   has_variance <- all(sapply(window_data_clean, sd) > 0)
   
   if (nrow(window_data_clean) >= 10 && has_variance) {
@@ -178,8 +168,6 @@ for (i in roll_window:nrow(cas_prepared)) {
     
     # Map correlation to distance: d = sqrt(2 * (1 - r))
     d_matrix <- sqrt(2 * (1 - r_matrix))
-    
-    # Final sanity check: If any cell in our distance matrix is still NA/NaN, replace it with 2 (max distance)
     d_matrix[is.na(d_matrix)] <- 2
     
     # Build the MST
@@ -266,11 +254,8 @@ for (i in roll_window:nrow(cas_prepared)) {
       dist = "arbitrary",         # Inform package we are passing a raw distance matrix
       printProgress = FALSE
     )
-    
-    # Extract the diagram matrix
+
     diag_matrix <- vr_diag$diagram
-    
-    # Filter strictly for H1 features (dimension == 1)
     h1_features <- diag_matrix[diag_matrix[, "dimension"] == 1, , drop = FALSE]
     
     if (nrow(h1_features) > 0) {
@@ -281,7 +266,6 @@ for (i in roll_window:nrow(cas_prepared)) {
       max_h1_pers <- max(persistence_lifespans)
       total_h1_pers <- sum(persistence_lifespans)
     } else {
-      # No loops detected in this window
       h1_count <- 0
       max_h1_pers <- 0
       total_h1_pers <- 0
@@ -332,17 +316,24 @@ Look closely at late 2023 through mid-2024. The VIX drops to its lowest historic
 **NCE**: The Neoclassical paradigm infers that because asset relationships are governed by a stationary covariance matrix, the physical structure of the market network is constant. A diversified portfolio's risk reduction remains stable and can be reliably trusted for long-term strategic asset allocation and Value-at-Risk (VaR) planning.
  
  1. Gathering Evidence: We test the null hypothesis that the covariance structures of the low-stress and high-stress regimes are identical:
-    - $$H_0: \mathbf{\Sigma}_{\text{Low-VIX}} = \mathbf{\Sigma}_{\text{High-VIX}}$$
-    - If the underlying covariance is stationary, the rolling MST Mean Distance ($D_t$) must behave as a stationary white noise process fluctuating tightly around a constant, time-invariant mean: $$H_0: D_t = \bar{D} + \epsilon_t \quad \text{where} \quad \epsilon_t \sim N(0, \sigma^2)$$. We test this via an Augmented Dickey-Fuller (ADF) test on the rolling MST distance series.
- 2. Decision Rule:
-    - **IF** the Jennrich test fails to reject covariance homogeneity ($p > 0.05$) AND the rolling MST Mean Distance series is stationary and completely uncorrelated with the VIX ($p_{\text{cor}} > 0.05$):
-    - Then NCE is verified. The market skeleton is rigid and static. A single historical covariance matrix is sufficient to build permanently diversified portfolios.
-    - **IF** the Jennrich test rejects homogeneity ($p \le 0.05$) OR the rolling MST metrics show structural breaks and systematic drift:
-    - Then the NCE assumption of a stable portfolio shield is broken. Covariance is non-stationary, meaning static risk models will severely miscalculate risk during environmental shifts.
+  - H0: Sigma_Low-VIX = Sigma_High-VIX
+  - If the underlying covariance is stationary, the rolling MST Mean Distance (Dt) must behave as a stationary white noise process fluctuating tightly around a constant, time-invariant mean: H0: Dt = Mean_D + e_t, where e_t ~ N(0, sigma^2). We test this via an Augmented Dickey-Fuller (ADF) test on the rolling MST distance series.
+ 2. Formal Hypotheses & Decision Rule
+      - Null Hypothesis (H0): Structural Stationarity (Rigid Market Skeleton)
+        - Jennrich Test fails to reject correlation homogeneity (Jennrich > 0.05) AND
+        - Rolling MST Mean Distance is stationary (ADF <= 0.05) AND
+        - MST distance is uncorrelated with (VIX corr > 0.05)
+        - Conclusion: Stationarity holds. The portfolio shield is static and rigid.
+        - The market covariance matrix and network topology are stationary, regime-invariant, and uncorrelated with market stress. A static historical covariance matrix provides a permanently valid portfolio shield.
+      - Alternative Hypothesis (H1): Structural Non-Stationarity (Dynamic Regime Shifts)
+        - Jennrich Test rejects homogeneity (Jennrich <= 0.05) OR
+        - Rolling MST Mean Distance exhibits a unit root (ADF > 0.05) OR
+        - MST distance significantly correlates with VIX (cor <= 0.05).
+        - The market covariance structure or network skeleton is non-stationary, exhibiting regime dependencies or structural drift. Static risk models will severely miscalculate risk during market environment shifts.
     
 
 ```{r}
-# Ensure we have clean, filtered matrices and series
+# Ensure clean, filtered matrices and series
 Sigma_Low  <- cov(low_vix_returns)
 Sigma_High <- cov(high_vix_returns)
 R_Low      <- cor(low_vix_returns)
@@ -352,45 +343,71 @@ n_low  <- nrow(low_vix_returns)
 n_high <- nrow(high_vix_returns)
 
 # Test 1: Jennrich Test for Correlation Matrix Equality
-# H0: R_Low = R_High (Correlation structures are identical across regimes)
 jennrich_test <- psych::cortest.jennrich(R1 = R_Low, R2 = R_High, n1 = n_low, n2 = n_high)
 
-nce_result <-paste0("--- 1. Jennrich Test for Correlation Matrix Equality ---\n",
-    "Chi-Square Statistic :", round(jennrich_test$chi, 4), "\n",
-    "Degrees of Freedom   :", jennrich_test$df, "\n",
-    "p-value              :", format.pval(jennrich_test$p, digits = 4), "\n")
+nce_result <- paste0(
+  "--- 1. Jennrich Test for Correlation Matrix Equality ---\n",
+  "Null Hypothesis (H0) : Correlation matrices are equal across regimes (R_Low = R_High)\n",
+  "Chi-Square Statistic : ", round(jennrich_test$chi, 4), "\n",
+  "Degrees of Freedom   : ", jennrich_test$df, "\n",
+  "p-value              : ", format.pval(jennrich_test$p, digits = 4), "\n"
+)
 
 if (jennrich_test$p <= 0.05) {
-  nce_result <- paste0(nce_result, "VERDICT: REJECT H0. The correlation matrix is non-stationary and regime-dependent.\n\n")
+  nce_result <- paste0(nce_result, "VERDICT              : REJECT H0. Correlation matrix is non-stationary and regime-dependent.\n\n")
 } else {
-  nce_result <- paste0(nce_result, "VERDICT: FAIL TO REJECT H0. The correlation matrix is stationary.\n\n")
+  nce_result <- paste0(nce_result, "VERDICT              : FAIL TO REJECT H0. Correlation matrix is stationary.\n\n")
 }
 
 # Test 2: Augmented Dickey-Fuller (ADF) Test on MST Mean Distance
-# H0: The rolling MST Mean Distance has a unit root (is non-stationary)
-# we clean NA values for the time series test
 rolling_distances <- na.omit(network_evolution$Mean_Distance)
 adf_result <- urca::ur.df(rolling_distances, type = "drift", selectlags = "AIC")
 df_stat    <- adf_result@teststat[1, 1]
 lag_param  <- adf_result@lags
 p_val_adf  <- urca::punitroot(df_stat, trend = "c", statistic = "t")
-nce_result <- paste0(nce_result,
+
+nce_result <- paste0(
+  nce_result,
   "--- 2. ADF Test on Rolling MST Mean Distance ---\n",
-  "Dickey-Fuller Stat    : ", round(df_stat, 4), "\n",
-  "Lag Parameter         : ", lag_param, "\n"
+  "Null Hypothesis (H0) : Series has a unit root (Non-stationary)\n",
+  "Dickey-Fuller Stat   : ", round(df_stat, 4), "\n",
+  "Lag Parameter        : ", lag_param, "\n"
 )
 
 if (length(p_val_adf) == 0 || is.na(p_val_adf)) {
-  nce_result <- paste0(nce_result, 
+  nce_result <- paste0(
+    nce_result, 
     "p-value              : NA (Inconclusive due to series properties)\n",
-    "VERDICT: INCONCLUSIVE. The test could not resolve stationarity.\n\n")
+    "VERDICT              : INCONCLUSIVE. Could not resolve stationarity.\n\n"
+  )
 } else {
   nce_result <- paste0(nce_result, "p-value              : ", format.pval(p_val_adf, digits = 4), "\n")
   if (p_val_adf <= 0.05) {
-    nce_result <- paste0(nce_result, "VERDICT: STATIONARY. The rolling network skeleton fluctuates around a constant mean.\n\n")
+    nce_result <- paste0(nce_result, "VERDICT              : REJECT H0. STATIONARY. The rolling network skeleton fluctuates around a constant mean.\n\n")
   } else {
-    nce_result <- paste0(nce_result, "VERDICT: NON-STATIONARY. The network skeleton exhibits structural drift/memory.\n\n")
+    nce_result <- paste0(nce_result, "VERDICT              : FAIL TO REJECT H0. NON-STATIONARY. The network skeleton exhibits structural drift/memory.\n\n")
   }
+}
+
+# Test 3: Correlation Test between Rolling MST Mean Distance and VIX
+cor_test <- cor.test(network_evolution$Mean_Distance, network_evolution$VIX, use = "complete.obs")
+cor_stat  <- cor_test$statistic
+cor_p_val <- cor_test$p.value
+cor_est   <- cor_test$estimate
+
+nce_result <- paste0(
+  nce_result,
+  "--- 3. Correlation Test: Rolling MST Mean Distance vs. VIX ---\n",
+  "Null Hypothesis (H0) : MST Mean Distance and VIX are uncorrelated (rho = 0)\n",
+  "Correlation (rho)    : ", round(cor_est, 4), "\n",
+  "t-Statistic          : ", round(cor_stat, 4), "\n",
+  "p-value              : ", format.pval(cor_p_val, digits = 4), "\n"
+)
+
+if (cor_p_val <= 0.05) {
+  nce_result <- paste0(nce_result, "VERDICT              : REJECT H0. Dynamic coupling detected (MST Distance correlates with VIX).\n\n")
+} else {
+  nce_result <- paste0(nce_result, "VERDICT              : FAIL TO REJECT H0. UNCORRELATED. Network geometry is independent of market stress.\n\n")
 }
 
 cat(nce_result)
@@ -400,30 +417,46 @@ cat(nce_result)
  
 **CAS**: The Complex Adaptive Systems paradigm infers that because joint asset transitions are governed by regime-dependent contact geometry, a portfolio’s effective diversification benefit will systematically shrink exactly during the deep market drawdowns an investor cares about avoiding.
  
- 1. Gathering Evidence: 
-    - Asymmetric Correlation Co-Movement Test measuring the mean difference in cross-asset correlations ($\Delta \rho_{i,j}$) and the distance (Frobenius Norm) between $\Sigma_{\text{Low}}$ and $\Sigma_{\text{High}}$ during distinct `VIX` regimes.
-    - Topological Compression Test (Pearson's $r$): We test for endogenous network collapse by calculating the correlation between the rolling MST Mean Distance ($D_t$) and the market fear gauge ($V_t$). Under CAS, as stress rises, the network skeleton contracts:
-    - $$H_0: \text{Cor}(D_t, V_t) = 0$$
-    - $$H_1: \text{Cor}(D_t, V_t) < 0$$
- 2. Decision Rule:
-    - **IF** the Frobenius matrix distance is statistically significant, AND Pearson’s correlation shows a strong, significant negative relationship ($\text{Cor}(D_t, V_t) \ll 0$ with $p < 0.05$), AND the MST network diameter contracts during VIX spikes:
-      - The market undergoes an endogenous topological phase transition under stress. The asset network actively collapses, causing correlation to break down and diversification to vanish at peak volatility.
-    - **IF** the network metrics remain stable or show random, uncorrelated fluctuations during volatility spikes:
-      - Then the asset ecosystem follows a simpler, linear geometry. Correlation shifts are temporary statistical noise rather than systemic phase changes.
-      
+
+1. Gathering Evidence:
+  -  Asymmetric Correlation Co-Movement Test measuring the mean difference in cross-asset correlations (Delta rho) and the distance (Frobenius Norm) between Sigma_Low and Sigma_High during distinct VIX regimes.
+  - Topological Compression Test (Pearson's r): We test for endogenous network collapse by calculating the correlation between the rolling MST Mean Distance (Dt) and the market fear gauge (Vt). Under CAS, as stress rises, the network skeleton contracts:
+* H0: Cor(Dt, Vt) = 0
+* H1: Cor(Dt, Vt) < 0
+
+2. Formal Hypotheses & Decision Rule
+  -  Null Hypothesis (H0): Linear Network Geometry (Stable Skeleton)
+    - Frobenius matrix distance is not statistically significant AND
+    - Pearson's correlation shows no significant negative relationship (p >= 0.05) AND
+    - MST network diameter remains stable during VIX spikes.
+    - Conclusion: The asset ecosystem follows a simpler, linear geometry. Network metrics remain stable or show random, uncorrelated fluctuations during volatility spikes, proving correlation shifts are temporary statistical noise rather than systemic phase changes.
+  - Alternative Hypothesis (H1): Endogenous Topological Phase Transition (Dynamic Network Collapse)
+    - Frobenius matrix distance is statistically significant AND
+    - Pearson's correlation shows a strong, significant negative relationship (Cor(Dt, Vt) < 0 with p < 0.05) AND
+    - MST network diameter contracts during VIX spikes.
+    - Conclusion: The market undergoes an endogenous topological phase transition under stress. The asset network actively collapses, causing correlation to break down and diversification to vanish at peak volatility.
+    
 
 ```{r}
 # Test 1: Frobenius Norm of Covariance Matrix Difference
-# Measures the absolute distance between the two regime charts in state-space
+# H0: ||Sigma_Low - Sigma_High||_F = 0 (Covariance matrix distance is zero)
 frobenius_norm <- norm(Sigma_Low - Sigma_High, type = "F")
 
 frob_out <- paste0(
   "--- 1. Frobenius Norm of Covariance Differences ---\n",
-  "Frobenius Distance (||Sigma_Low - Sigma_High||_F):", round(frobenius_norm, 6), "\n\n")
+  "Null Hypothesis (H0) : Covariance matrices are identical (||Sigma_Low - Sigma_High||_F = 0)\n",
+  "Frobenius Distance   : ", round(frobenius_norm, 6), "\n"
+)
+
+if (frobenius_norm > 0) {
+  frob_out <- paste0(frob_out, "VERDICT              : REJECT H0. Non-zero matrix distance detected between stress regimes.\n\n")
+} else {
+  frob_out <- paste0(frob_out, "VERDICT              : FAIL TO REJECT H0. Covariance matrices are identical.\n\n")
+}
 
 # Test 2: Topological Network Compression Test (Pearson's r)
-# H0: Correlation(MST Mean Distance, VIX) >= 0 (No compression under stress)
-# H1: Correlation(MST Mean Distance, VIX) < 0 (Compression under stress)
+# H0: Cor(MST Mean Distance, VIX) >= 0 (No compression under stress)
+# H1: Cor(MST Mean Distance, VIX) < 0 (Compression under stress)
 pearson_test <- cor.test(
   network_evolution$Mean_Distance, 
   network_evolution$VIX, 
@@ -431,20 +464,25 @@ pearson_test <- cor.test(
   method = "pearson"
 )
 
-frob_out <- paste0(frob_out,
-    "--- 2. Pearson Test: Network Distance vs. Market Fear (VIX) ---\n",
-    "Correlation (r)      :", round(pearson_test$estimate, 4), "\n",
-    "t-statistic          :", round(pearson_test$statistic, 4), "\n",
-    "p-value              :", pearson_test$p, "\n")
+frob_out <- paste0(
+  frob_out,
+  "--- 2. Pearson Test: Network Distance vs. Market Fear (VIX) ---\n",
+  "Null Hypothesis (H0) : Network distance is not negatively correlated with VIX (rho >= 0)\n",
+  "Correlation (r)      : ", round(pearson_test$estimate, 4), "\n",
+  "t-Statistic          : ", round(pearson_test$statistic, 4), "\n",
+  "p-value              : ", format.pval(pearson_test$p.value, digits = 4), "\n"
+)
 
-if (pearson_test$p <= 0.05 && pearson_test$estimate < -0.3) {
-  frob_out <- paste0(frob_out,"VERDICT: VALIDATED. Massive, statistically significant network contraction during fear spikes.\n\n")
+if (pearson_test$p.value <= 0.05 && pearson_test$estimate < -0.3) {
+  frob_out <- paste0(frob_out, "VERDICT              : REJECT H0. Massive, statistically significant network contraction during fear spikes.\n\n")
+} else if (pearson_test$p.value <= 0.05) {
+  frob_out <- paste0(frob_out, "VERDICT              : REJECT H0. Statistically significant network contraction detected.\n\n")
 } else {
-  frob_out <- paste0(frob_out,"VERDICT: REJECTED. No meaningful relationship between network structure and market fear.\n\n")
+  frob_out <- paste0(frob_out, "VERDICT              : FAIL TO REJECT H0. No significant negative relationship between network structure and VIX.\n\n")
 }
 
 # Test 3: MST Diameter Contraction Comparison
-# Extract the underlying MST objects for low and high VIX regimes to calculate diameter
+# H0: High-VIX MST Diameter >= Low-VIX MST Diameter (No diameter contraction)
 dist_low  <- sqrt(2 * (1 - R_Low))
 dist_high <- sqrt(2 * (1 - R_High))
 
@@ -454,17 +492,21 @@ g_high <- minimum.spanning.tree(graph_from_adjacency_matrix(dist_high, mode = "u
 diameter_low  <- diameter(g_low, directed = FALSE, weights = E(g_low)$weight)
 diameter_high <- diameter(g_high, directed = FALSE, weights = E(g_high)$weight)
 
-
-frob_out <- paste0(frob_out, "--- 3. MST Network Diameter Comparison ---\n",
-                   "Low-VIX MST Diameter :", round(diameter_low, 4), "\n",
-                   "High-VIX MST Diameter:", round(diameter_high, 4), "\n")
+frob_out <- paste0(
+  frob_out, 
+  "--- 3. MST Network Diameter Comparison ---\n",
+  "Null Hypothesis (H0) : High-VIX diameter >= Low-VIX diameter (No contraction under stress)\n",
+  "Low-VIX MST Diameter : ", round(diameter_low, 4), "\n",
+  "High-VIX MST Diameter: ", round(diameter_high, 4), "\n"
+)
 
 if (diameter_high < diameter_low) {
   percent_contraction <- ((diameter_low - diameter_high) / diameter_low) * 100
-  frob_out <- paste0(frob_out, "VERDICT: VALIDATED. Network diameter contracted by", round(percent_contraction, 2), "% under stress.\n\n")
+  frob_out <- paste0(frob_out, "VERDICT              : REJECT H0. Network diameter contracted by ", round(percent_contraction, 2), "% under stress.\n\n")
 } else {
-  frob_out <- paste0(frob_out,"VERDICT: REJECTED. Network diameter did not contract significantly under stress.\n\n")
+  frob_out <- paste0(frob_out, "VERDICT              : FAIL TO REJECT H0. Network diameter did not contract under stress.\n\n")
 }
+
 cat(frob_out)
 ```
 

@@ -42,7 +42,7 @@ D <- diag(vol)
 Sigma <- D %*% corr_matrix %*% D
 
 # --- 2. SOLVE ANALYTIC EFFICIENT FRONTIER WITH EMPIRICAL DATA ---
-rf <- 0.045  # Standard policy/risk-free rate (4.5%)
+rf <- 0.04168  # Standard policy/risk-free rate (4.5168) as of Jan 01 2026
 inv_Sigma <- solve(Sigma)
 
 ones <- rep(1, length(mu))
@@ -131,6 +131,26 @@ ggplot() +
     plot.title = element_text(face = "bold"),
     axis.text = element_text(face = "bold")
   )
+
+# --- PRINT NCE TANGENCY PORTFOLIO SUMMARY ---
+cat("======================================================================\n")
+cat("              NCE TANGENCY PORTFOLIO (M) OPTIMAL OUTPUT               \n")
+cat("======================================================================\n")
+cat("Risk-Free Rate (rf)             :", scales::percent(rf, accuracy = 0.01), "\n")
+cat("Expected Annualized Return (E[R]):", scales::percent(ret_m, accuracy = 0.01), "\n")
+cat("Expected Annualized Risk (SD)   :", scales::percent(sd_m, accuracy = 0.01), "\n")
+cat("Tangency Sharpe Ratio           :", round(sharpe_m, 4), "\n")
+cat("----------------------------------------------------------------------\n")
+cat("OPTIMAL ASSET WEIGHTS:\n")
+
+tangency_summary <- data.frame(
+  Asset = names(mu),
+  Optimal_Weight = as.numeric(w_tangency),
+  Allocation = scales::percent(as.numeric(w_tangency), accuracy = 0.01)
+)
+
+print(tangency_summary[, c("Asset", "Allocation")], row.names = FALSE)
+cat("======================================================================\n")
 ```
 
 

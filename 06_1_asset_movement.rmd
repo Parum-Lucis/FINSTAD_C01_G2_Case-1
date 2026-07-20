@@ -353,7 +353,19 @@ Furthermore, because these feedback mechanisms prevent the system from settling 
 
 **Code**:
 ```{r}
-# 1. Safely isolate the asset names, accounting for special characters like hyphens
+rolling_window_size <- 21
+logadj_cols <- names(master_df)[str_detect(names(master_df), "\\.LogAdj$")]
+
+jet_bundle_raw <- master_df %>%
+  select(Date, all_of(logadj_cols)) %>%
+  rename_with(~ str_replace(.x, "\\.LogAdj$", ".Position"), all_of(logadj_cols)) %>%
+  mutate(
+    across(ends_with(".Position"), ~ .x - lag(.x), 
+           .names = "{str_remove(.col, '\\\\.Position')}.Velocity"),
+    across(ends_with(".Position"), ~ .x - 2 * lag(.x) + lag(.x, 2), 
+           .names = "{str_remove(.col, '\\\\.Position')}.Acceleration")
+  )
+
 all_cols <- names(jet_bundle_raw)
 pos_cols <- all_cols[str_detect(all_cols, "\\.Position$")]
 available_assets <- str_remove(pos_cols, "\\.Position$") %>% str_remove_all("`")
@@ -363,14 +375,12 @@ horizons <- 1:21
 
 for (asset in available_assets) {
   
-  # Map columns precisely using lookups that handle special characters smoothly
   pos_col <- all_cols[str_remove_all(all_cols, "`") == paste0(asset, ".Position")][1]
   vel_col <- all_cols[str_remove_all(all_cols, "`") == paste0(asset, ".Velocity")][1]
   acc_col <- all_cols[str_remove_all(all_cols, "`") == paste0(asset, ".Acceleration")][1]
   
   if (is.na(pos_col) || is.na(vel_col) || is.na(acc_col)) next
   
-  # Extract data vectors via double-bracket character index strings
   df_subset <- jet_bundle_raw %>%
     select(Date, 
            Position = !!sym(pos_col), 
@@ -380,7 +390,6 @@ for (asset in available_assets) {
   
   if (nrow(df_subset) < 50) next
   
-  # Iterate dynamically across horizons 1 to 21 to capture the true decay continuous paths
   space_list <- list()
   for (space in c("Position", "Velocity", "Acceleration")) {
     vec <- df_subset[[space]]
@@ -397,7 +406,6 @@ for (asset in available_assets) {
       Space = space,
       Horizon_T = horizons,
       Empirical_Variance = empirical_vars,
-      # This serves as a pure Brownian Motion benchmark baseline across all spaces
       Brownian_Benchmark = base_var * horizons
     )
   }
@@ -405,7 +413,7 @@ for (asset in available_assets) {
   cas_scaling_list[[asset]] <- bind_rows(space_list)
 }
 
-# 2. Consolidate and pivot cleanly for ggplot mapping
+# 2. Consolidate and pivot cleanly
 cas_scaling_df <- bind_rows(cas_scaling_list) %>%
   pivot_longer(
     cols = c(Empirical_Variance, Brownian_Benchmark),
@@ -418,8 +426,8 @@ cas_scaling_df <- bind_rows(cas_scaling_list) %>%
       Model_Hypothesis == "Brownian_Benchmark" ~ "Brownian Motion Benchmark (Linear Scaling)"
     ),
     Space_Label = case_when(
-      Space == "Position"     ~ "Position Space (Log Returns)",
-      Space == "Velocity"     ~ "Velocity Space (Momentum/Trends)",
+      Space == "Position"      ~ "Position Space (Log Returns)",
+      Space == "Velocity"      ~ "Velocity Space (Momentum/Trends)",
       Space == "Acceleration" ~ "Acceleration Space (Systemic Stress Shifts)"
     )
   )
@@ -430,23 +438,15 @@ cas_true_dynamics_df <- cas_scaling_df %>%
   mutate(
     log_T = log(Horizon_T),
     log_Var = log(Variance_Value),
-    
-    # Simple linear regression slope estimator: 2H = Cov(log_Var, log_T) / Var(log_T)
     two_H = cov(log_Var, log_T) / var(log_T),
     Hurst_Est = two_H / 2
   ) %>%
   ungroup()
 
-# ==============================================================================
-# 2. ISOLATE THE 1-DAY BASELINE MARGINAL VARIANCE COORDINATES
-# ==============================================================================
 base_variance_map <- cas_scaling_df %>%
   filter(Model_Hypothesis == "Empirical (Actual CAS Dynamics)", Horizon_T == 1) %>%
   select(Asset, Space, Base_Var = Variance_Value)
 
-# ==============================================================================
-# 3. CONSTRUCT THE FRACTIONAL POWER-LAW TARGET SCALING MATRIX
-# ==============================================================================
 cas_lines_df <- cas_scaling_df %>%
   filter(Model_Hypothesis == "Brownian Motion Benchmark (Linear Scaling)") %>%
   left_join(base_variance_map, by = c("Asset", "Space")) %>%
@@ -456,65 +456,76 @@ cas_lines_df <- cas_scaling_df %>%
   ) %>%
   mutate(
     Model_Hypothesis = "CAS Fractional Target (T^2H)",
-    # Project variance using the unique estimated power-law parameter
     Variance_Value = Base_Var * (Horizon_T^(2 * Hurst_Est))
   ) %>%
   select(-Base_Var, -Hurst_Est)
 
-# Combine the empirical data, the linear benchmarks, and our fractional projections
+# 3. Combine matrices and generate clean HTML-formatted facet labels
 plotting_matrix_df <- bind_rows(cas_scaling_df, cas_lines_df) %>%
   left_join(
     cas_true_dynamics_df %>% select(Asset, Space, Hurst_Est) %>% unique(),
     by = c("Asset", "Space")
+  ) %>%
+  left_join(
+    base_variance_map,
+    by = c("Asset", "Space")
+  ) %>%
+  mutate(
+    # Shortened equation string
+    Hurst_Eq = paste0("Var = ", round(Base_Var, 4), " * T^", round(2 * Hurst_Est, 2)),
+    # HTML <br> handles line breaks cleanly inside ggplotly without stacking
+    Asset_Facet = paste0("<b>", Asset, "</b> (H = ", round(Hurst_Est, 3), ")<br>", Hurst_Eq)
   )
 
-# ==============================================================================
-# 4. GENERATE THE THREE-WAY PARADIGM COMPARISON REPORTS
-# ==============================================================================
 plotly_plots_2 <- list()
 
 for (current_space in unique(plotting_matrix_df$Space_Label)) {
   
   space_data <- plotting_matrix_df %>% 
     filter(Space_Label == current_space) %>%
-    # Format a clean tool-tip label showing the specific Hurst asset values
-    mutate(Tooltip_Label = paste0("Asset: ", Asset, "\nEst. H: ", round(Hurst_Est, 3)))
+    mutate(Tooltip_Label = paste0("Asset: ", Asset, 
+                                  "\nEquation: ", Hurst_Eq, 
+                                  "\nEst. H: ", round(Hurst_Est, 3)))
   
   p_cas_true <- ggplot(space_data, 
                        aes(x = Horizon_T, y = Variance_Value, 
                            color = Model_Hypothesis, linetype = Model_Hypothesis)) +
-    geom_line(linewidth = 1.2, alpha = 0.8) +
-    geom_point(aes(text = Tooltip_Label), size = 1.2, alpha = 0.5) +
-    facet_wrap(~Asset, scales = "free_y") +
+    geom_line(linewidth = 0.9, alpha = 0.8) +
+    geom_point(aes(text = Tooltip_Label), size = 1.0, alpha = 0.5) +
+    facet_wrap(~Asset_Facet, scales = "free_y") +
     scale_color_manual(values = c(
-      "Empirical Data" = "darkblue", 
+      "Empirical (Actual CAS Dynamics)" = "darkblue", 
       "Brownian Motion Benchmark (Linear Scaling)" = "darkgrey",
       "CAS Fractional Target (T^2H)" = "darkorange"
     )) +
     scale_linetype_manual(values = c(
-      "Empirical Data" = "solid", 
+      "Empirical (Actual CAS Dynamics)" = "solid", 
       "Brownian Motion Benchmark (Linear Scaling)" = "dashed",
       "CAS Fractional Target (T^2H)" = "dotdash"
     )) +
-    theme_minimal() +
+    theme_minimal(base_size = 9) +
     labs(
-      title = paste("True CAS Fractional Scaling Properties:", current_space),
-      subtitle = "Validating the Power-Law Memory Path (T^2H) against Ordinary Linear Diffusion",
+      title = paste("Fractional Scaling Properties:", current_space),
       x = "Time Horizon Scaling (Days, T)",
-      y = "Aggregated Coordinate Variance",
-      color = "Model Hypothesis Class",
-      linetype = "Model Hypothesis Class"
+      y = "Aggregated Variance",
+      color = "Model Hypothesis",
+      linetype = "Model Hypothesis"
     ) +
     theme(
-      strip.text = element_text(face = "bold", size = 11),
+      strip.text = element_text(size = 8),
+      plot.title = element_text(size = 11, face = "bold"),
       legend.position = "bottom"
     )
   
-  plotly_plots_2[[current_space]] <- ggplotly(p_cas_true, height = 600) %>%
-    layout(legend = list(orientation = "h", y = -0.15))
+  # Adjust margins so the title and facet headers do not overlap
+  plotly_plots_2[[current_space]] <- ggplotly(p_cas_true, height = 650) %>%
+    layout(
+      margin = list(t = 80, b = 60),
+      legend = list(orientation = "h", y = -0.15)
+    )
 }
 
-# Output the interactive multi-asset diagnostic suites
+# Output interactive charts
 htmltools::tagList(plotly_plots_2)
 ```
 
@@ -542,6 +553,25 @@ The final programmatic verdict is then determined by a strict, binary decision r
 
 **Code**:
 ```{r nce-inference-engine, echo=TRUE, message=FALSE}
+
+# Initialize data frame copy starting with the Date key
+price_dynamics_df <- master_df %>% select(Date)
+
+for (i in seq_along(return_cols)) {
+  raw_col_name <- return_cols[i]
+  
+  # Clean asset label and isolate the short prefix base (e.g., "BTC-USD" -> "BTC")
+  clean_asset  <- str_remove_all(raw_col_name, "`") %>% str_remove("\\.LogAdj$")
+  short_prefix <- str_split(clean_asset, "[-.]")[[1]][1]
+  
+  
+  price_dynamics_df[[raw_col_name]] <- master_df[[raw_col_name]]
+  
+  
+  price_dynamics_df[[paste0(short_prefix, "_5d_return")]]  <- zoo::rollapplyr(master_df[[raw_col_name]], 5, sum, fill = NA)
+  price_dynamics_df[[paste0(short_prefix, "_21d_return")]] <- zoo::rollapplyr(master_df[[raw_col_name]], 21, sum, fill = NA)
+}
+
 all_cols <- names(price_dynamics_df)
 return_cols <- all_cols[str_detect(all_cols, "(\\.LogAdj|^`.+\\.LogAdj`$)")]
 
