@@ -11,7 +11,6 @@ Here, we view the entire context of the market and economy.
 
 ```{r}
 # --- 1. DYNAMIC PARAMETER ESTIMATION FROM DATA ---
-# Extract daily log returns from your master dataframe
 daily_returns <- master_df %>%
   select(
     Date,
@@ -23,11 +22,9 @@ daily_returns <- master_df %>%
   drop_na() %>%
   select(-Date)
 
-# Define trading frequency scaling factor (Annualized)
 scale_factor <- 252
 
 # A. Calculate Dynamic Expected Annualized Returns (mu)
-# Using mean daily log returns annualized
 mu <- colMeans(daily_returns) * scale_factor
 
 # B. Calculate Dynamic Annualized Volatilities (vol)
@@ -37,50 +34,87 @@ vol <- apply(daily_returns, 2, sd) * sqrt(scale_factor)
 corr_matrix <- cor(daily_returns)
 
 # D. Calculate Dynamic Covariance Matrix (Sigma)
-# Sigma = D %*% R %*% D where D is diagonal of standard deviations
 D <- diag(vol)
 Sigma <- D %*% corr_matrix %*% D
+names(mu) <- colnames(daily_returns)
+colnames(Sigma) <- rownames(Sigma) <- colnames(daily_returns)
 
-# --- 2. SOLVE ANALYTIC EFFICIENT FRONTIER WITH EMPIRICAL DATA ---
-rf <- 0.04168  # Standard policy/risk-free rate (4.5168) as of Jan 01 2026
-inv_Sigma <- solve(Sigma)
+# --- 2. SOLVE LONG-ONLY TANGENCY PORTFOLIO (M) VIA QUADRATIC PROGRAMMING ---
+rf <- 0.04168  # Standard policy/risk-free rate (4.168%)
 
-ones <- rep(1, length(mu))
-A <- as.numeric(t(ones) %*% inv_Sigma %*% ones)
-B <- as.numeric(t(ones) %*% inv_Sigma %*% mu)
-C <- as.numeric(t(mu) %*% inv_Sigma %*% mu)
-D_val <- A * C - B^2
+# Quadratic Programming Setup: Min 0.5 * y' Sigma y  s.t.  y' (mu - rf) = 1  and  y >= 0
+Dmat <- Sigma
+dvec <- rep(0, length(mu))
+Amat <- cbind(mu - rf, diag(length(mu)))
+bvec <- c(1, rep(0, length(mu)))
 
-# Generate empirical frontier curve points
-target_returns <- seq(min(mu) - 0.05, max(mu) + 0.10, length.out = 500)
-frontier_points <- data.frame(Return = target_returns) %>%
-  mutate(
-    Variance = (A * Return^2 - 2 * B * Return + C) / D_val,
-    SD = sqrt(Variance)
-  )
+qp_tangency <- solve.QP(Dmat = Dmat, dvec = dvec, Amat = Amat, bvec = bvec, meq = 1)
 
-# --- 3. DISSOLVE TANGENCY PORTFOLIO (M) ---
-excess_return <- mu - rf * ones
-w_tangency <- inv_Sigma %*% excess_return
-w_tangency <- w_tangency / sum(w_tangency)
+# Normalize weights so they sum strictly to 100%
+w_tangency <- qp_tangency$solution / sum(qp_tangency$solution)
+names(w_tangency) <- names(mu)
 
+# Tangency portfolio metrics
 ret_m <- as.numeric(t(w_tangency) %*% mu)
-sd_m <- as.numeric(sqrt(t(w_tangency) %*% Sigma %*% w_tangency))
+sd_m  <- as.numeric(sqrt(t(w_tangency) %*% Sigma %*% w_tangency))
 sharpe_m <- (ret_m - rf) / sd_m
 
-# --- 4. RISK DECOMPOSITION FOR UAL ---
+# --- 3. GENERATE LONG-ONLY EFFICIENT FRONTIER POINTS ---
+target_returns <- seq(min(mu), max(mu), length.out = 200)
+frontier_list <- list()
+
+for (i in seq_along(target_returns)) {
+  r_target <- target_returns[i]
+  
+  # Min 0.5 * w' Sigma w  s.t.  w' mu = r_target, w' 1 = 1, w >= 0
+  Amat_ef <- cbind(mu, rep(1, length(mu)), diag(length(mu)))
+  bvec_ef <- c(r_target, 1, rep(0, length(mu)))
+  
+  qp_ef <- tryCatch({
+    solve.QP(Dmat = Dmat, dvec = dvec, Amat = Amat_ef, bvec = bvec_ef, meq = 2)
+  }, error = function(e) NULL)
+  
+  if (!is.null(qp_ef)) {
+    w_ef <- qp_ef$solution
+    sd_ef <- sqrt(as.numeric(t(w_ef) %*% Sigma %*% w_ef))
+    frontier_list[[i]] <- tibble(Return = r_target, SD = sd_ef)
+  }
+}
+
+frontier_points <- bind_rows(frontier_list)
+
+# --- 4. PRINT CONSTRAINED NCE TANGENCY PORTFOLIO OUTPUT ---
+cat("======================================================================\n")
+cat("          LONG-ONLY NCE TANGENCY PORTFOLIO (M) OPTIMAL OUTPUT          \n")
+cat("======================================================================\n")
+cat("Risk-Free Rate (rf)             :", scales::percent(rf, accuracy = 0.01), "\n")
+cat("Expected Annualized Return (E[R]):", scales::percent(ret_m, accuracy = 0.01), "\n")
+cat("Expected Annualized Risk (SD)   :", scales::percent(sd_m, accuracy = 0.01), "\n")
+cat("Tangency Sharpe Ratio           :", round(sharpe_m, 4), "\n")
+cat("----------------------------------------------------------------------\n")
+cat("OPTIMAL REALISTIC ASSET WEIGHTS:\n")
+
+tangency_summary <- data.frame(
+  Asset = names(mu),
+  Allocation = scales::percent(as.numeric(w_tangency), accuracy = 0.01)
+)
+
+print(tangency_summary, row.names = FALSE)
+cat("======================================================================\n\n")
+
+# --- 5. RISK DECOMPOSITION FOR UAL ---
 ual_ret <- mu["UAL"]
 ual_sd  <- vol["UAL"]
-sd_a <- (ual_ret - rf) / sharpe_m
+sd_a    <- (ual_ret - rf) / sharpe_m
 
-# --- 5. RENDER THE DYNAMIC PLOT ---
+# --- 6. RENDER THE DYNAMIC PLOT ---
 ggplot() +
   geom_path(data = frontier_points, aes(x = SD, y = Return), 
-            color = "black", size = 1.1) +
+            color = "black", linewidth = 1.1) +
   geom_abline(intercept = rf, slope = sharpe_m, 
-              color = "blue", size = 1, linetype = "solid") +
+              color = "blue", linewidth = 1, linetype = "solid") +
   
-  # Horizontal drop lines
+  # Horizontal and vertical drop lines
   annotate("segment", x = 0, xend = ual_sd, y = ual_ret, yend = ual_ret, 
            color = "grey50", linetype = "dashed") +
   annotate("segment", x = sd_a, xend = sd_a, y = 0, yend = ual_ret, 
@@ -90,13 +124,13 @@ ggplot() +
   
   # Risk Brackets at the bottom of the plot
   annotate("segment", x = 0.01, xend = sd_a - 0.01, y = 0.01, yend = 0.01, 
-           arrow = arrow(ends = "both", angle = 90, length = unit(.1, "cm")), color = "#D14949", size = 0.8) +
-  annotate("text", x = sd_a / 2, y = 0.02, label = "Systematic\nRisk", 
+           arrow = arrow(ends = "both", angle = 90, length = unit(.1, "cm")), color = "#D14949", linewidth = 0.8) +
+  annotate("text", x = sd_a / 2, y = 0.025, label = "Systematic\nRisk", 
            color = "#D14949", size = 3, fontface = "bold") +
   
   annotate("segment", x = sd_a + 0.01, xend = ual_sd - 0.01, y = 0.01, yend = 0.01, 
-           arrow = arrow(ends = "both", angle = 90, length = unit(.1, "cm")), color = "#20639B", size = 0.8) +
-  annotate("text", x = (sd_a + ual_sd) / 2, y = 0.02, label = "Diversifiable\n(Idiosyncratic) Risk", 
+           arrow = arrow(ends = "both", angle = 90, length = unit(.1, "cm")), color = "#20639B", linewidth = 0.8) +
+  annotate("text", x = (sd_a + ual_sd) / 2, y = 0.025, label = "Diversifiable\n(Idiosyncratic) Risk", 
            color = "#20639B", size = 3, fontface = "bold") +
   
   # Reference Nodes
@@ -110,7 +144,7 @@ ggplot() +
   annotate("point", x = sd_a, y = ual_ret, color = "black", size = 3) +
   annotate("text", x = sd_a + 0.01, y = ual_ret - 0.01, label = "A", fontface = "bold") +
   
-  # Asset labels (Dynamically positioned at their real calculated risk/return points)
+  # Asset labels
   geom_point(data = data.frame(SD = vol, Return = mu, Asset = names(mu)), 
              aes(x = SD, y = Return, color = Asset), size = 4) +
   geom_text(data = data.frame(SD = vol, Return = mu, Asset = names(mu)), 
@@ -119,11 +153,11 @@ ggplot() +
   scale_color_manual(values = c("SPY" = "#3CAEA3", "PAL" = "#F6D55C", "UAL" = "#20639B", "BTC" = "#D14949")) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
-  coord_cartesian(xlim = c(0, max(vol) * 2.5), ylim = c(min(mu), max(mu) * 2.5)) +
+  coord_cartesian(xlim = c(0, max(vol) * 1.2), ylim = c(min(0, min(mu)), max(mu) * 1.2)) +
   theme_minimal(base_size = 12) +
   labs(
-    title = "Capital Allocation Line & Empirical Efficient Frontier",
-    subtitle = "Calculated Dynamically from Real-World Asset Return Matrix",
+    title = "Long-Only Capital Allocation Line & Empirical Efficient Frontier",
+    subtitle = "Constrained Portfolio Optimization (No Short-Selling: Weights Between 0% and 100%)",
     x = "Portfolio Total Risk (Standard Deviation)",
     y = "Expected Return (E[R])"
   ) +
@@ -131,27 +165,9 @@ ggplot() +
     plot.title = element_text(face = "bold"),
     axis.text = element_text(face = "bold")
   )
-
-# --- PRINT NCE TANGENCY PORTFOLIO SUMMARY ---
-cat("======================================================================\n")
-cat("              NCE TANGENCY PORTFOLIO (M) OPTIMAL OUTPUT               \n")
-cat("======================================================================\n")
-cat("Risk-Free Rate (rf)             :", scales::percent(rf, accuracy = 0.01), "\n")
-cat("Expected Annualized Return (E[R]):", scales::percent(ret_m, accuracy = 0.01), "\n")
-cat("Expected Annualized Risk (SD)   :", scales::percent(sd_m, accuracy = 0.01), "\n")
-cat("Tangency Sharpe Ratio           :", round(sharpe_m, 4), "\n")
-cat("----------------------------------------------------------------------\n")
-cat("OPTIMAL ASSET WEIGHTS:\n")
-
-tangency_summary <- data.frame(
-  Asset = names(mu),
-  Optimal_Weight = as.numeric(w_tangency),
-  Allocation = scales::percent(as.numeric(w_tangency), accuracy = 0.01)
-)
-
-print(tangency_summary[, c("Asset", "Allocation")], row.names = FALSE)
-cat("======================================================================\n")
 ```
+
+
 
 
 **NCE (extended — factor decomposition):** The single-scalar CAPM view above is the *degenerate* case of a richer, but still classical, equilibrium-econometrics model: the Litterman & Scheinkman (1991) three-factor decomposition of the yield curve [4]. This is a linear, orthogonal (PCA-derived) re-coordinatization of the same term structure - it relaxes "one rate" to "three factors," but it is still a static, reversible, equilibrium description with no feedback, heterogeneous agents, or path-dependent mechanism attached. That is why it belongs on the NCE side of this report rather than the CAS side: richer linear algebra is not, by itself, evidence of a complex adaptive system. (See the Footnote at the end of this section for what a genuinely CAS-consistent account of the yield curve would need to look like instead.)
@@ -232,7 +248,129 @@ p_factors <- ggplot(factors_long, aes(x = Date, y = Value, color = Coordinate)) 
   )
 
 # --- 4. RENDER STRUCTURE PLOT ---
-grid.arrange(p_raw, p_factors, ncol = 2)
+# grid.arrange(p_raw, p_factors, ncol = 2)
+p_raw
+p_factors
+```
+
+
+**CAS**:
+
+```{r}
+# --- 1. REGIME FILTERING & DATA PREPARATION ---
+# Filter data for High-VIX stress regime (VIX >= 23.9) and set parameters
+high_vix_threshold <- 23.9
+horizon_T <- 21      # 21-day investment horizon
+alpha <- 0.05        # 95% confidence level for CVaR
+assets <- c("SPY", "PAL", "UAL", "BTC")
+
+returns_df <- master_df %>%
+  select(
+    Date,
+    SPY = SPY.LogAdj,
+    PAL = PAL.LogAdj,
+    UAL = UAL.LogAdj,
+    BTC = `BTC-USD.LogAdj`,
+    VIX = VIX.Adjusted
+  ) %>%
+  drop_na()
+
+# Isolate full series for Hurst exponent estimation and High-VIX subset for tail risk
+full_returns <- returns_df %>% select(all_of(assets))
+high_vix_returns <- returns_df %>% filter(VIX >= high_vix_threshold) %>% select(all_of(assets))
+
+# --- 2. ESTIMATE HURST EXPONENTS & FRACTIONAL CVAR ---
+# Compute Hurst exponent (H) per asset over full return history
+hurst_vector <- sapply(full_returns, function(x) {
+  tryCatch(pracma::hurstexp(x, display = FALSE)$Hs, error = function(e) 0.5)
+})
+names(hurst_vector) <- assets
+
+# Compute empirical daily CVaR (Expected Shortfall at 95%) during High-VIX regime
+calc_daily_cvar <- function(returns_matrix, conf_level = 0.05) {
+  apply(returns_matrix, 2, function(r) {
+    var_cutoff <- quantile(r, probs = conf_level)
+    -mean(r[r <= var_cutoff])
+  })
+}
+
+daily_cvar_vix <- calc_daily_cvar(high_vix_returns, conf_level = alpha)
+
+# --- 3. FRACTIONAL RISK PARITY OPTIMIZATION ENGINE ---
+# Function to calculate portfolio Fractional CVaR scaled by weighted Hurst exponent
+portfolio_fractional_cvar <- function(w, returns_matrix, hurst_vec, T_days, conf_level = 0.05) {
+  port_returns <- as.matrix(returns_matrix) %*% w
+  var_cutoff <- quantile(port_returns, probs = conf_level)
+  base_cvar <- -mean(port_returns[port_returns <= var_cutoff])
+  
+  # Scale portfolio risk using weighted fractional scaling exponent (T^H)
+  w_hurst <- sum(w * hurst_vec)
+  return(base_cvar * (T_days ^ w_hurst))
+}
+
+# Objective function: Minimize variance of Marginal Risk Contributions (Equal Risk Contribution)
+risk_parity_objective <- function(w, returns_matrix, hurst_vec, T_days, conf_level = 0.05) {
+  # Normalize weights inside objective
+  w <- w / sum(w)
+  n <- length(w)
+  eps <- 1e-5
+  mrc <- numeric(n)
+  
+  base_p_cvar <- portfolio_fractional_cvar(w, returns_matrix, hurst_vec, T_days, conf_level)
+  
+  # Calculate numerical marginal risk contributions (MRC)
+  for (i in 1:n) {
+    w_plus <- w
+    w_plus[i] <- w_plus[i] + eps
+    cvar_plus <- portfolio_fractional_cvar(w_plus, returns_matrix, hurst_vec, T_days, conf_level)
+    mrc[i] <- (cvar_plus - base_p_cvar) / eps
+  }
+  
+  # Absolute risk contribution per asset
+  rc <- w * mrc
+  target_rc <- sum(rc) / n
+  
+  # Sum of squared errors from equal risk contribution
+  return(sum((rc - target_rc)^2))
+}
+
+# Run bounded optimization (w >= 0)
+init_weights <- rep(1 / length(assets), length(assets))
+
+opt_result <- optim(
+  par = init_weights,
+  fn = risk_parity_objective,
+  returns_matrix = high_vix_returns,
+  hurst_vec = hurst_vector,
+  T_days = horizon_T,
+  conf_level = alpha,
+  method = "L-BFGS-B",
+  lower = rep(0.001, length(assets)),
+  upper = rep(1.0, length(assets))
+)
+
+# Normalize final optimal weights
+w_opt <- opt_result$par / sum(opt_result$par)
+names(w_opt) <- assets
+
+# --- 4. RENDER OUTPUT REPORT ---
+cat("======================================================================\n")
+cat("    FRACTIONAL REGIME-SWITCHING CVAR RISK PARITY PORTFOLIO OUTPUT     \n")
+cat("======================================================================\n")
+cat("Target Holding Horizon (Days, T):", horizon_T, "\n")
+cat("VIX Regime Stress Filter        : VIX >=", high_vix_threshold, "\n")
+cat("Tail Risk Confidence Level     :", paste0((1 - alpha) * 100, "% CVaR"), "\n")
+cat("----------------------------------------------------------------------\n")
+
+output_summary <- tibble(
+  Asset = assets,
+  Hurst_Exponent = round(hurst_vector, 3),
+  High_VIX_Daily_CVaR = scales::percent(daily_cvar_vix, accuracy = 0.01),
+  Optimal_Allocation = scales::percent(w_opt, accuracy = 0.01)
+)
+
+print(as.data.frame(output_summary), row.names = FALSE)
+cat("======================================================================\n")
 ```
 
 ## Dynamics
